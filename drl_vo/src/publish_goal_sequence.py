@@ -129,8 +129,16 @@ class MoveBaseSeq():
         rospy.loginfo("Goal pose "+str(self.goal_cnt+1)+" is now being processed by the Action Server...")
 
     def feedback_cb(self, feedback):
+
         #rospy.loginfo("Feedback for goal "+str(self.goal_cnt)+": "+str(feedback))
-        rospy.loginfo("Feedback for goal pose "+str(self.goal_cnt+1)+" received")
+        #rospy.loginfo("Feedback for goal pose "+str(self.goal_cnt+1)+" received")
+        
+        self.client._set_simple_state(1)
+
+        # print ("get comm state")
+        # print (self.client.gh.get_comm_state())
+        # print ("get simple state")
+        # print (self.client.simple_state)
 
     def done_cb(self, status, result):
         self.goal_cnt += 1
