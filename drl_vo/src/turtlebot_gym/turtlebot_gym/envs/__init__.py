@@ -7,4 +7,5 @@
 #
 # This script is to setup the Gym environment.
 #------------------------------------------------------------------------------
-from turtlebot_gym.envs.drl_nav_env import DRLNavEnv
+from turtlebot_gym.turtlebot_gym.envs.drl_nav_env import DRLNavEnv
+
