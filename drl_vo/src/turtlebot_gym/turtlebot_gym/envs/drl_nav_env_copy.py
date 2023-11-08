@@ -222,7 +222,7 @@ class DRLNavEnv(gym.Env):
             map = self.map
             while not self.pos_valid_flag:
                 # initialize the robot pose:
-                seed_initial_pose = random.randint(0, 9)
+                seed_initial_pose = random.randint(0, 18)
                 self._set_initial_pose(seed_initial_pose)
                 # wait for the initial process is ok:
                 time.sleep(4)
@@ -281,10 +281,10 @@ class DRLNavEnv(gym.Env):
                 self._reset_odom_pub.publish(Empty())
             '''
             # reset robot inital pose in rviz:
-            self._pub_initial_position(1, 1, 0)
+            self._pub_initial_position(1, 0, 0.1377)
         elif(seed_initial_pose == 1):
             # set turtlebot initial pose in gazebo:
-            self._pub_initial_model_state(2.5, 0, 1.57)
+            self._pub_initial_model_state(14, 7, 1.5705)
             time.sleep(1)
             '''
             # reset robot odometry:
@@ -293,10 +293,10 @@ class DRLNavEnv(gym.Env):
                 self._reset_odom_pub.publish(Empty())     
             ''' 
             # reset robot inital pose in rviz:
-            self._pub_initial_position(2.5, 0, 1.57)
+            self._pub_initial_position(12.61, 7.5, 1.70)
         elif(seed_initial_pose == 2):
             # set turtlebot initial pose in gazebo:
-            self._pub_initial_model_state(-2, 1, 0)
+            self._pub_initial_model_state(1, 16, 0)
             time.sleep(1)
             '''
             # reset robot odometry:
@@ -305,10 +305,10 @@ class DRLNavEnv(gym.Env):
                 self._reset_odom_pub.publish(Empty())   
             '''     
             # reset robot inital pose in rviz:
-            self._pub_initial_position(-2, 1, 0)
+            self._pub_initial_position(-1, 14.5, 0.13)
         elif(seed_initial_pose == 3):
             # set turtlebot initial pose in gazebo:
-            self._pub_initial_model_state(3, 5, -1.3113)
+            self._pub_initial_model_state(14, 22.5, -1.3113)
             time.sleep(1)
             '''
             # reset robot odometry:
@@ -317,10 +317,10 @@ class DRLNavEnv(gym.Env):
               self._reset_odom_pub.publish(Empty())
             '''
             # reset robot inital pose in rviz:
-            self._pub_initial_position(3, 5, -1.3113)
+            self._pub_initial_position(10.7, 23, -1.16)
         elif(seed_initial_pose == 4):
             # set turtlebot initial pose in gazebo:
-            self._pub_initial_model_state(4, -4, 1.5705)
+            self._pub_initial_model_state(4, 4, 1.5705)
             time.sleep(1)
             '''
             # reset robot odometry:
@@ -329,10 +329,10 @@ class DRLNavEnv(gym.Env):
                 self._reset_odom_pub.publish(Empty())
             '''
             # reset robot inital pose in rviz:
-            self._pub_initial_position(4, -4, 1.5705)
+            self._pub_initial_position(3.6, 3.1, 1.70)
         elif(seed_initial_pose == 5):
             # set turtlebot initial pose in gazebo:
-            self._pub_initial_model_state(-3, 2, 0)
+            self._pub_initial_model_state(2, 9, 0)
             time.sleep(1)
             '''
             # reset robot odometry:
@@ -341,10 +341,10 @@ class DRLNavEnv(gym.Env):
                 self._reset_odom_pub.publish(Empty())
             '''
             # reset robot inital pose in rviz:
-            self._pub_initial_position(-3, 2, 0)
+            self._pub_initial_position(1, 8, 0.13)
         elif(seed_initial_pose == 6):
             # set turtlebot initial pose in gazebo:
-            self._pub_initial_model_state(5, -3, 3.14)
+            self._pub_initial_model_state(30, 9, 3.14)
             time.sleep(1)
             '''
             # reset robot odometry:
@@ -353,10 +353,10 @@ class DRLNavEnv(gym.Env):
                 self._reset_odom_pub.publish(Empty())
             '''
             # reset robot inital pose in rviz:
-            self._pub_initial_position(5, -3, 3.14)
+            self._pub_initial_position(28, 11.4, 3.25)
         elif(seed_initial_pose == 7):
             # set turtlebot initial pose in gazebo:
-            self._pub_initial_model_state(-3, 0, 3.14)
+            self._pub_initial_model_state(25, 17, 3.14)
             time.sleep(1)
             '''
             # reset robot odometry:
@@ -365,10 +365,10 @@ class DRLNavEnv(gym.Env):
                 self._reset_odom_pub.publish(Empty())
             '''
             # reset robot inital pose in rviz:
-            self._pub_initial_position(-3, 0, 3.14)
+            self._pub_initial_position(22.5, 18.8, 3.25)
         elif(seed_initial_pose == 8):
             # set turtlebot initial pose in gazebo:
-            self._pub_initial_model_state(0, 4, 0)
+            self._pub_initial_model_state(5, 8, 0)
             time.sleep(1)
             '''
             # reset robot odometry:
@@ -377,10 +377,10 @@ class DRLNavEnv(gym.Env):
                 self._reset_odom_pub.publish(Empty())
             '''
             # reset robot inital pose in rviz:
-            self._pub_initial_position(0, 4, 0)
+            self._pub_initial_position(3.96, 7.47, 0.137)
         elif(seed_initial_pose == 9):
             # set turtlebot initial pose in gazebo:
-            self._pub_initial_model_state(0, -1, 2)
+            self._pub_initial_model_state(10, 12, 0)
             time.sleep(1)
             '''
             # reset robot odometry:
@@ -389,7 +389,7 @@ class DRLNavEnv(gym.Env):
                 self._reset_odom_pub.publish(Empty())
             '''
             # reset robot inital pose in rviz:
-            self._pub_initial_position(0, -1, 2)
+            self._pub_initial_position(8.29, 12.07, 0.116)
         elif(seed_initial_pose == 10):
             # set turtlebot initial pose in gazebo:
             self._pub_initial_model_state(14, 15, 1.576)
@@ -718,7 +718,7 @@ class DRLNavEnv(gym.Env):
         Publishing new random goal [x, y, theta] for global planner
         :return: goal position [x, y, theta]
         """
-        dis_diff = 20
+        dis_diff = 21
         # only select the random goal in range of 20 m:
         while(dis_diff >= 7 or dis_diff < 4.2): # or dis_diff < 1):
             x, y, theta = self._get_random_pos_on_map(self.map)
