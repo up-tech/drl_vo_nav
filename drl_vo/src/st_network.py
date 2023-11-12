@@ -234,7 +234,7 @@ class EndRNN(RNNBase):
         self.output_size = 256
         self.embedding_size = 64
         self.input_size = 3
-        self.edge_rnn_size = 2
+        self.edge_rnn_size = 256
 
         # Linear layer to embed input
         self.encoder_linear = nn.Linear(256, self.embedding_size)
@@ -250,7 +250,7 @@ class EndRNN(RNNBase):
 
 
 
-    def forward(self, robot_s, h_spatial_other, h, masks):
+    def forward(self, robot_s, h_spatial_other):
         '''
         Forward pass for the model
         params:
@@ -268,12 +268,11 @@ class EndRNN(RNNBase):
 
         concat_encoded = torch.cat((encoded_input, h_edges_embedded), -1)
 
-        x, h_new = self._forward_gru(concat_encoded, h, masks)
+        # x, h_new = self._forward_gru(concat_encoded, h, masks)
 
-        outputs = self.output_linear(x)
+        # outputs = self.output_linear(x)
 
-
-        return outputs, h_new
+        return concat_encoded
 
 class selfAttn_merge_SRNN(BaseFeaturesExtractor):
     """
@@ -288,7 +287,7 @@ class selfAttn_merge_SRNN(BaseFeaturesExtractor):
         """
 
         super(selfAttn_merge_SRNN, self).__init__(observation_space, features_dim)
-        self.is_recurrent = True
+        self.is_recurrent = True 
 
         self.human_num = 10
         #observation_space['spatial_edges'].shape[0] #5
@@ -320,7 +319,7 @@ class selfAttn_merge_SRNN(BaseFeaturesExtractor):
 
         self.critic_linear = init_(nn.Linear(hidden_size, 1))
 
-        robot_size = 5
+        robot_size = 7
         self.robot_linear = nn.Sequential(init_(nn.Linear(robot_size, 256)), nn.ReLU()) # todo: check dim
         self.human_node_final_linear=init_(nn.Linear(self.output_size,2))
 
@@ -330,6 +329,9 @@ class selfAttn_merge_SRNN(BaseFeaturesExtractor):
 
         self.temporal_edges = [0]
         self.spatial_edges = np.arange(1, self.human_num+1)
+
+        self.final_layer = nn.Sequential(nn.Linear(128, 256),
+                                         nn.ReLU())
 
         # dummy_human_mask = [0] * self.human_num
         # dummy_human_mask[0] = 1
@@ -341,7 +343,7 @@ class selfAttn_merge_SRNN(BaseFeaturesExtractor):
         # else:
         #     self.dummy_human_mask = Variable(torch.Tensor([dummy_human_mask]).cuda())
 
-    def forward(self, inputs, rnn_hxs):
+    def forward(self, inputs):
         # if infer:
         #     # Test/rollout time
         #     seq_length = 1
@@ -354,58 +356,68 @@ class selfAttn_merge_SRNN(BaseFeaturesExtractor):
 
         nenv = 1
         seq_length = 1
-        
 
         robot_node = reshapeT(inputs['robot_node'], seq_length, nenv) #(1, 1, 1, 5)
+        #print(f"robot input size: {inputs['robot_node'].shape}")
 
         temporal_edges = reshapeT(inputs['temporal_edges'], seq_length, nenv) #(1, 1, 1, 2)
+        #print(f"temporal_edges size: {temporal_edges.shape}")
 
         spatial_edges = reshapeT(inputs['spatial_edges'], seq_length, nenv) #(1, 1, 20, 12)
+        spatial_edges = spatial_edges.view(seq_length, nenv, self.human_num, -1)
+        #print(f"spatial_edges: {spatial_edges.shape}")
 
         detected_human_num = inputs['detected_human_num'].squeeze(-1).cpu().int() #changable
+        #print(f"detected_human_num size: {detected_human_num}")
 
-        hidden_states_node_RNNs = reshapeT(rnn_hxs['human_node_rnn'], 1, nenv) #(1, 1, 1, 128)
+        #hidden_states_node_RNNs = reshapeT(rnn_hxs['human_node_rnn'], 1, nenv) #(1, 1, 1, 128)
 
-        if self.device == torch.device("cpu"):
-            all_hidden_states_edge_RNNs = Variable(
-                torch.zeros(1, nenv, 1+self.human_num, rnn_hxs['human_human_edge_rnn'].size()[-1]).cpu())
-        else:
-            all_hidden_states_edge_RNNs = Variable(
-                torch.zeros(1, nenv, 1+self.human_num, rnn_hxs['human_human_edge_rnn'].size()[-1]).cuda())
+        # if self.device == torch.device("cpu"):
+        #     all_hidden_states_edge_RNNs = Variable(
+        #         torch.zeros(1, nenv, 1+self.human_num, rnn_hxs['human_human_edge_rnn'].size()[-1]).cpu())
+        # else:
+        #     all_hidden_states_edge_RNNs = Variable(
+        #         torch.zeros(1, nenv, 1+self.human_num, rnn_hxs['human_human_edge_rnn'].size()[-1]).cuda())
 
         robot_states = torch.cat((temporal_edges, robot_node), dim=-1)
-        robot_states = self.robot_linear(robot_states)
-        print(f'robot state size: {robot_states.size()}')
-
+        robot_states = self.robot_linear(robot_states)  #(1, 1, 1, 256)
+        #print(f'robot state size: {robot_states.size()}')
 
         spatial_attn_out=self.spatial_attn(spatial_edges, detected_human_num).view(seq_length, nenv, self.human_num, -1)
 
         output_spatial = self.spatial_linear(spatial_attn_out)
+        #print(f'output_spatial size: {output_spatial.size()}')
 
         # robot-human attention
         hidden_attn_weighted, _ = self.attn(robot_states, output_spatial, detected_human_num)
+        #print(f'hidden_attn_weighted size: {hidden_attn_weighted.size()}')
 
         # Do a forward pass through GRU
-        outputs, h_nodes \
-            = self.humanNodeRNN(robot_states, hidden_attn_weighted, hidden_states_node_RNNs)
+        outputs = self.humanNodeRNN(robot_states, hidden_attn_weighted)
 
         # Update the hidden and cell states
-        all_hidden_states_node_RNNs = h_nodes
+        #all_hidden_states_node_RNNs = h_nodes
         outputs_return = outputs
 
-        rnn_hxs['human_node_rnn'] = all_hidden_states_node_RNNs
-        rnn_hxs['human_human_edge_rnn'] = all_hidden_states_edge_RNNs
+        # rnn_hxs['human_node_rnn'] = all_hidden_states_node_RNNs
+        # rnn_hxs['human_human_edge_rnn'] = all_hidden_states_edge_RNNs
 
         # x is the output and will be sent to actor and critic
         x = outputs_return[:, :, 0, :]
+        
+        final_output = self.final_layer(x)
+        final_output = final_output.squeeze(0)
+        #print(f'final_output size: {final_output.size()}')
 
-        hidden_critic = self.critic(x)
-        hidden_actor = self.actor(x)
+        # hidden_critic = self.critic(x)
+        # hidden_actor = self.actor(x)
 
-        for key in rnn_hxs:
-            rnn_hxs[key] = rnn_hxs[key].squeeze(0)
+        # for key in rnn_hxs:
+        #     rnn_hxs[key] = rnn_hxs[key].squeeze(0)
 
-        return self.critic_linear(hidden_critic).view(-1, 1), hidden_actor.view(-1, self.output_size), rnn_hxs
+        return final_output
+
+        #return self.critic_linear(hidden_critic).view(-1, 1), hidden_actor.view(-1, self.output_size), rnn_hxs
 
 def init(module, weight_init, bias_init, gain=1):
     weight_init(module.weight.data, gain=gain)

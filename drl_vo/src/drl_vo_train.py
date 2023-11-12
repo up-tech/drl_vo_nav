@@ -89,17 +89,19 @@ print(obs)
 policy_kwargs = dict(
     features_extractor_class=selfAttn_merge_SRNN,
     #features_extractor_kwargs=dict(features_dim=256),
-    net_arch=[dict(pi=[256], vf=[256])]
+    net_arch=[dict(pi=[256, 256], vf=[256, 256])]
 )
 
 # raw training:
-model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs, learning_rate=1e-3, verbose=2, 
-            tensorboard_log=log_dir, n_steps=256, n_epochs=5, batch_size=64) #, gamma=0.96, ent_coef=0.1, vf_coef=0.4)
+# model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs, learning_rate=1e-3, verbose=2, 
+#             tensorboard_log=log_dir, n_steps=256, n_epochs=5, batch_size=64) #, gamma=0.96, ent_coef=0.1, vf_coef=0.4)
+model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs, learning_rate=1e-3, verbose=1, 
+            tensorboard_log=log_dir)
 
 print(model.policy)
 
 # continue training:
-kwargs = {'tensorboard_log':log_dir, 'verbose':2, 'n_epochs':5, 'n_steps':256, 'batch_size':64,'learning_rate':5e-5}
+#kwargs = {'tensorboard_log':log_dir, 'verbose':2, 'n_epochs':5, 'n_steps':256, 'batch_size':64,'learning_rate':5e-5}
 # model_file = rospy.get_param('~model_file', "./model/drl_pre_train.zip")
 # model = PPO.load(model_file, env=env, **kwargs)
 

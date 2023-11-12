@@ -14,6 +14,7 @@ from st_msgs.msg import ST_data
 # custom define messages:
 from geometry_msgs.msg import Point, PoseStamped, Twist, TwistStamped
 from pedsim_msgs.msg import TrackedPerson, TrackedPersons
+from sensor_msgs.msg import LaserScan
 
 # parameters:
 NUM_TP = 10     # the number of timestamps
@@ -25,6 +26,12 @@ class STData:
     # Constructor
     def __init__(self):
         # initialize data:  
+
+        self.scan = [] #np.zeros(720)
+        self.scan_all = np.zeros(1080)
+        self.scan_tmp = np.zeros(720)
+        self.scan_all_tmp = np.zeros(1080)
+        
         self.robot_node = np.zeros(5) # gx, gy, r, v_pref, theta
         self.temporal_edges = np.zeros(2)
         self.spatial_edges = []  #(PREDICTION_NUM + 1) * NUM_PEDS
@@ -36,6 +43,7 @@ class STData:
         self.goal_sub = rospy.Subscriber("/cnn_goal", Point, self.goal_callback)
         self.vel_sub = rospy.Subscriber("/mobile_base/commands/velocity", Twist, self.vel_callback)
         self.st_data_pub = rospy.Publisher('/st_data', ST_data, queue_size=1, latch=False)
+        self.scan_sub = rospy.Subscriber("/scan", LaserScan, self.scan_callback)
 
         # timer:
         self.rate = 20  # 20 Hz velocity controller
@@ -88,8 +96,23 @@ class STData:
     def dist_to_robot(self, x, y):
         dist = np.linalg.norm([x, y])
         return dist
+    
+    def scan_callback(self, laserScan_msg):
+        # get the laser scan data:
+        self.scan_tmp = np.zeros(720)
+        self.scan_all_tmp = np.zeros(1080)
+        scan_data = np.array(laserScan_msg.ranges, dtype=np.float32)
+        scan_data[np.isnan(scan_data)] = 0.
+        scan_data[np.isinf(scan_data)] = 0.
+        self.scan_tmp = scan_data[180:900]
+        self.scan_all_tmp = scan_data
+
+        print("debug scan callback")
 
     def timer_callback(self, event):
+
+        self.scan.append(self.scan_tmp.tolist())
+        self.scan_all = self.scan_all_tmp
         
         st_data = ST_data()
         st_data.robot_node = self.robot_node
@@ -97,8 +120,9 @@ class STData:
         st_data.spatial_edges = self.spatial_edges
         st_data.visible_masks = self.visible_masks
         st_data.detected_human_num = self.detected_human_num
+        st_data.scan = [float(val) for sublist in self.scan for val in sublist]
         
-        #print(st_data)
+        print(st_data)
 
         self.st_data_pub.publish(st_data)
 

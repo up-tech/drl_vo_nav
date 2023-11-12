@@ -893,37 +893,29 @@ class DRLNavEnv(gym.Env):
         """Calculates the reward to give based on the observations given.
         """
         # reward parameters:
-        r_arrival = 20 #15
-        r_waypoint = 3.2 #2.5 #1.6 #2 #3 #1.6 #6 #2.5 #2.5
-        r_collision = -20 #-15
-        r_scan = -0.2 #-0.15 #-0.3
-        r_angle = 0.6 #0.5 #1 #0.8 #1 #0.5
-        r_rotation = -0.1 #-0.15 #-0.4 #-0.5 #-0.2 # 0.1
+        r_arrival = 1 #15
+        #r_waypoint = 3.2 #2.5 #1.6 #2 #3 #1.6 #6 #2.5 #2.5
+        r_collision = -0.25 #-15
+        #r_scan = -0.2 #-0.15 #-0.3
+        #r_angle = 0.6 #0.5 #1 #0.8 #1 #0.5
+        #r_rotation = -0.1 #-0.15 #-0.4 #-0.5 #-0.2 # 0.1
 
         angle_thresh = np.pi/6
         w_thresh = 1 # 0.7
 
         # reward parts:
-        r_o = self._timeout_reward()
-        r_g = self._goal_reached_reward(r_arrival, r_waypoint)
-        r_c = self._obstacle_collision_punish(self.cnn_data.scan[-720:], r_scan, r_collision)
+
+        r_g = self._goal_reached_reward(r_arrival)
+        r_c = self._obstacle_collision_punish(self.st_data.scan[-720:], r_collision)
         #r_w = self._angular_velocity_punish(self.curr_vel.angular.z,  r_rotation, w_thresh)
         #r_t = self._theta_reward(self.goal, self.mht_peds, self.curr_vel.linear.x, r_angle, angle_thresh)
-        reward = r_g + r_c + r_o #+ r_t #+ r_w #+ r_v #+ r_p
+        reward = r_g + r_c #+ r_t #+ r_w #+ r_v #+ r_p
         #rospy.logwarn("Current Velocity: \ncurr_vel = {}".format(self.curr_vel.linear.x))
         rospy.logwarn("Compute reward done. \nreward = {}".format(reward))
 
-
-
         return reward
     
-    def _timeout_reward(self):
-        max_iteration = 512
-        if(self.num_iterations >= max_iteration):  # timeout to the goal
-            reward = 0
-        return reward
-
-    def _goal_reached_reward(self, r_arrival, r_waypoint):
+    def _goal_reached_reward(self, r_arrival):
         """
         Returns positive reward if the robot reaches the goal.
         :param transformed_goal goal position in robot frame
@@ -938,6 +930,7 @@ class DRLNavEnv(gym.Env):
             self.curr_pose.position.z - self.goal_position.z
             ])
         )
+        reward = 0
         if(dist_to_goal <= self.GOAL_RADIUS):  # goal reached: t = T
             reward = r_arrival
             
@@ -965,13 +958,14 @@ class DRLNavEnv(gym.Env):
         rospy.logwarn("Goal reached reward: {}".format(reward))
         return reward
 
-    def _obstacle_collision_punish(self, scan, r_scan, r_collision):
+    def _obstacle_collision_punish(self, scan, r_collision):
         """
         Returns negative reward if the robot collides with obstacles.
         :param scan containing obstacles that should be considered
         :param k reward constant
         :return: returns reward colliding with obstacles
         """
+
         min_scan_dist = np.amin(scan[scan!=0])
         #if(self.bump_flag == True): #or self.pos_valid_flag == False):
         if(min_scan_dist <= self.ROBOT_RADIUS and min_scan_dist >= 0.02):
@@ -1082,9 +1076,11 @@ class DRLNavEnv(gym.Env):
             self._episode_done = True
             rospy.logwarn("\n!!!\nTurtlebot went to the goal\n!!!")
             return True
+        
+
 
         # 2) Obstacle collision?
-        scan = self.cnn_data.scan[-720:]
+        scan = self.st_data.scan[-720:]
         min_scan_dist = np.amin(scan[scan!=0])
         #if(self.bump_flag == True): #or self.pos_valid_flag == False):
         if(min_scan_dist <= self.ROBOT_RADIUS and min_scan_dist >= 0.02):
