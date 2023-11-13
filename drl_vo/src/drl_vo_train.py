@@ -82,8 +82,9 @@ os.makedirs(log_dir, exist_ok=True)
 env = gym.make('drl-nav-v0')
 env = Monitor(env, log_dir) #, allow_early_resets=True)  # in order to get rollout log data
 # env = DummyVecEnv([lambda: env])
+
 obs = env.reset()
-print(obs)
+#print(obs)
 
 # policy parameters:
 policy_kwargs = dict(
@@ -93,12 +94,12 @@ policy_kwargs = dict(
 )
 
 # raw training:
-# model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs, learning_rate=1e-3, verbose=2, 
-#             tensorboard_log=log_dir, n_steps=256, n_epochs=5, batch_size=64) #, gamma=0.96, ent_coef=0.1, vf_coef=0.4)
-model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs, learning_rate=1e-3, verbose=1, 
-            tensorboard_log=log_dir)
+model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs, learning_rate=1e-3, verbose=2, 
+            tensorboard_log=log_dir, n_steps=256, n_epochs=5, batch_size=64)
+# model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs, learning_rate=1e-3, verbose=1, 
+#             tensorboard_log=log_dir)
 
-print(model.policy)
+#print(model.policy)
 
 # continue training:
 #kwargs = {'tensorboard_log':log_dir, 'verbose':2, 'n_epochs':5, 'n_steps':256, 'batch_size':64,'learning_rate':5e-5}
