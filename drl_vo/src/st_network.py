@@ -42,14 +42,14 @@ class SpatialEdgeSelfAttn(nn.Module):
     # Given a list of sequence lengths, create a mask to indicate which indices are padded
     # e.x. Input: [3, 1, 4], max_human_num = 5
     # Output: [[1, 1, 1, 0, 0], [1, 0, 0, 0, 0], [1, 1, 1, 1, 0]]
-    def create_attn_mask(self, each_seq_len, seq_len, nenv, max_human_num):
+    def create_attn_mask(self, each_seq_len, seq_len, max_human_num):
         # mask with value of False means padding and should be ignored by attention
         # why +1: use a sentinel in the end to handle the case when each_seq_len = 18
         if self.device == torch.device("cpu"):
-            mask = torch.zeros(seq_len * nenv, max_human_num + 1).cpu()
+            mask = torch.zeros(seq_len, max_human_num + 1).cpu()
         else:
-            mask = torch.zeros(seq_len*nenv, max_human_num+1).cuda()
-        mask[torch.arange(seq_len*nenv), each_seq_len.long()] = 1.
+            mask = torch.zeros(seq_len, max_human_num+1).cuda()
+        mask[torch.arange(seq_len), each_seq_len.long()] = 1.
         mask = torch.logical_not(mask.cumsum(dim=1))
         # remove the sentinel
         mask = mask[:, :-1].unsqueeze(-2) # seq_len*nenv, 1, max_human_num
@@ -66,12 +66,12 @@ class SpatialEdgeSelfAttn(nn.Module):
         '''
         # inp is padded sequence [seq_len, nenv, max_human_num, 2]
 
-        seq_len, nenv, max_human_num, _ = inp.size() #[1, 1, 20, 12] #seq_len: batch_size, nenv, 
+        seq_len, max_human_num, _ = inp.size() #[1, 1, 20, 12] #seq_len: batch_size, nenv, 
 
-        attn_mask = self.create_attn_mask(each_seq_len, seq_len, nenv, max_human_num)  # [seq_len*nenv, 1, max_human_num]
+        attn_mask = self.create_attn_mask(each_seq_len, seq_len, max_human_num)  # [seq_len*nenv, 1, max_human_num]
         attn_mask = attn_mask.squeeze(1)  # if we use pytorch builtin function
 
-        input_emb=self.embedding_layer(inp).view(seq_len*nenv, max_human_num, -1)
+        input_emb=self.embedding_layer(inp).view(seq_len, max_human_num, -1)
         input_emb=torch.transpose(input_emb, dim0=0, dim1=1) # if we use pytorch builtin function, v1.7.0 has no batch first option
         q=self.q_linear(input_emb)
         k=self.k_linear(input_emb)
@@ -115,26 +115,26 @@ class EdgeAttention_M(nn.Module):
         self.agent_num = 1
         self.num_attention_head = 1
 
-    def create_attn_mask(self, each_seq_len, seq_len, nenv, max_human_num):
+    def create_attn_mask(self, each_seq_len, seq_len, max_human_num):
         # mask with value of False means padding and should be ignored by attention
         # why +1: use a sentinel in the end to handle the case when each_seq_len = 18
         if self.device == torch.device("cpu"):
-            mask = torch.zeros(seq_len * nenv, max_human_num + 1).cpu()
+            mask = torch.zeros(seq_len, max_human_num + 1).cpu()
         else:
-            mask = torch.zeros(seq_len * nenv, max_human_num + 1).cuda()
-        mask[torch.arange(seq_len * nenv), each_seq_len.long()] = 1.
+            mask = torch.zeros(seq_len, max_human_num + 1).cuda()
+        mask[torch.arange(seq_len), each_seq_len.long()] = 1.
         mask = torch.logical_not(mask.cumsum(dim=1))
         # remove the sentinel
         mask = mask[:, :-1].unsqueeze(-2)  # seq_len*nenv, 1, max_human_num
         return mask
 
     def att_func(self, temporal_embed, spatial_embed, h_spatials, attn_mask=None):
-        seq_len, nenv, num_edges, h_size = h_spatials.size()  # [1, 12, 30, 256] in testing,  [12, 30, 256] in training
+        seq_len, num_edges, h_size = h_spatials.size()  # [1, 12, 30, 256] in testing,  [12, 30, 256] in training
         # print(temporal_embed.size())
         # print(spatial_embed.size())
         attn = temporal_embed * spatial_embed
         #print(attn.shape)
-        attn = torch.sum(attn, dim=3)
+        attn = torch.sum(attn, dim=2)
         #print(attn.shape)
 
         # Variable length
@@ -147,7 +147,7 @@ class EdgeAttention_M(nn.Module):
             attn = attn.masked_fill(attn_mask == 0, -1e9)
 
         # Softmax
-        attn = attn.view(seq_len, nenv, self.agent_num, self.human_num)
+        attn = attn.view(seq_len, self.agent_num, self.human_num)
         attn = torch.nn.functional.softmax(attn, dim=-1)
         # print(attn[0, 0, 0].cpu().numpy())
 
@@ -156,17 +156,17 @@ class EdgeAttention_M(nn.Module):
 
         # reshape h_spatials and attn
         # shape[0] = seq_len, shape[1] = num of spatial edges (6*5 = 30), shape[2] = 256
-        h_spatials = h_spatials.view(seq_len, nenv, self.agent_num, self.human_num, h_size)
-        h_spatials = h_spatials.view(seq_len * nenv * self.agent_num, self.human_num, h_size).permute(0, 2,
+        h_spatials = h_spatials.view(seq_len, self.agent_num, self.human_num, h_size)
+        h_spatials = h_spatials.view(seq_len * self.agent_num, self.human_num, h_size).permute(0, 2,
                                                                                          1)  # [seq_len*nenv*6, 5, 256] -> [seq_len*nenv*6, 256, 5]
 
-        attn = attn.view(seq_len * nenv * self.agent_num, self.human_num).unsqueeze(-1)  # [seq_len*nenv*6, 5, 1]
+        attn = attn.view(seq_len * self.agent_num, self.human_num).unsqueeze(-1)  # [seq_len*nenv*6, 5, 1]
         weighted_value = torch.bmm(h_spatials, attn)  # [seq_len*nenv*6, 256, 1]
         #print(attn.shape)
         #print(weighted_value.shape)
 
         # reshape back
-        weighted_value = weighted_value.squeeze(-1).view(seq_len, nenv, self.agent_num, h_size)  # [seq_len, 12, 6 or 1, 256]
+        weighted_value = weighted_value.squeeze(-1).view(seq_len, self.agent_num, h_size)  # [seq_len, 12, 6 or 1, 256]
         return weighted_value, attn
 
 
@@ -183,7 +183,7 @@ class EdgeAttention_M(nn.Module):
             if self.args.sort_humans is True, the true length of the sequence. Should be the number of detected humans
             else, it is the mask itself
         '''
-        seq_len, nenv, max_human_num, _ = h_spatials.size()
+        seq_len, max_human_num, _ = h_spatials.size()
         # find the number of humans by the size of spatial edgeRNN hidden state
         self.human_num = max_human_num // self.agent_num
 
@@ -199,12 +199,12 @@ class EdgeAttention_M(nn.Module):
             #print(f'spatial_embed size {spatial_embed.size()}')
 
             # Dot based attention
-            temporal_embed = temporal_embed.repeat_interleave(self.human_num, dim=2)
+            temporal_embed = temporal_embed.repeat_interleave(self.human_num, dim=1)
             #print(f'temporal_embed size {temporal_embed.size()}')
 
 
-            attn_mask = self.create_attn_mask(each_seq_len, seq_len, nenv, max_human_num)  # [seq_len*nenv, 1, max_human_num]
-            attn_mask = attn_mask.squeeze(-2).view(seq_len, nenv, max_human_num)
+            attn_mask = self.create_attn_mask(each_seq_len, seq_len, max_human_num)  # [seq_len*nenv, 1, max_human_num]
+            attn_mask = attn_mask.squeeze(-2).view(seq_len, max_human_num)
 
             weighted_value,attn=self.att_func(temporal_embed, spatial_embed, h_spatials, attn_mask=attn_mask)
             weighted_value_list.append(weighted_value)
@@ -354,21 +354,23 @@ class selfAttn_merge_SRNN(BaseFeaturesExtractor):
         #     seq_length = self.seq_length
         #     nenv = self.nenv // self.nminibatch
 
-        nenv = 1
-        seq_length = 1
-
-        robot_node = reshapeT(inputs['robot_node'], seq_length, nenv) #(1, 1, 1, 5)
+        #robot_node = reshapeT(inputs['robot_node'], seq_length, nenv) #(1, 1, 1, 5)
+        robot_node = inputs['robot_node']
         #print(f"robot input size: {inputs['robot_node'].shape}")
 
-        temporal_edges = reshapeT(inputs['temporal_edges'], seq_length, nenv) #(1, 1, 1, 2)
+        #temporal_edges = reshapeT(inputs['temporal_edges'], seq_length, nenv) #(1, 1, 1, 2)
+        temporal_edges = inputs['temporal_edges']
         #print(f"temporal_edges size: {temporal_edges.shape}")
 
-        spatial_edges = reshapeT(inputs['spatial_edges'], seq_length, nenv) #(1, 1, 20, 12)
-        spatial_edges = spatial_edges.view(seq_length, nenv, self.human_num, -1)
+        #spatial_edges = reshapeT(inputs['spatial_edges'], seq_length, nenv) #(1, 1, 20, 12)
+        spatial_edges = inputs['spatial_edges']
+        spatial_edges = spatial_edges.view(spatial_edges.shape[0] ,self.human_num, -1)
+        #spatial_edges = spatial_edges.view(self.human_num, -1)
         #print(f"spatial_edges: {spatial_edges.shape}")
 
-        detected_human_num = inputs['detected_human_num'].squeeze(-1).cpu().int() #changable
-        #print(f"detected_human_num size: {detected_human_num}")
+        #detected_human_num = inputs['detected_human_num'].squeeze(-1).cpu().int() #changable
+        detected_human_num = inputs['detected_human_num'].int() #changable
+        #print(f"detected_human_num size: {detected_human_num.shape}")
 
         #hidden_states_node_RNNs = reshapeT(rnn_hxs['human_node_rnn'], 1, nenv) #(1, 1, 1, 128)
 
@@ -383,7 +385,8 @@ class selfAttn_merge_SRNN(BaseFeaturesExtractor):
         robot_states = self.robot_linear(robot_states)  #(1, 1, 1, 256)
         #print(f'robot state size: {robot_states.size()}')
 
-        spatial_attn_out=self.spatial_attn(spatial_edges, detected_human_num).view(seq_length, nenv, self.human_num, -1)
+        spatial_attn_out=self.spatial_attn(spatial_edges, detected_human_num)
+        #print(f'spatial_attn_out size: {spatial_attn_out.size()}')
 
         output_spatial = self.spatial_linear(spatial_attn_out)
         #print(f'output_spatial size: {output_spatial.size()}')
@@ -395,18 +398,20 @@ class selfAttn_merge_SRNN(BaseFeaturesExtractor):
         # Do a forward pass through GRU
         outputs = self.humanNodeRNN(robot_states, hidden_attn_weighted)
 
+
         # Update the hidden and cell states
         #all_hidden_states_node_RNNs = h_nodes
-        outputs_return = outputs
+        #outputs_return = outputs
 
         # rnn_hxs['human_node_rnn'] = all_hidden_states_node_RNNs
         # rnn_hxs['human_human_edge_rnn'] = all_hidden_states_edge_RNNs
 
         # x is the output and will be sent to actor and critic
-        x = outputs_return[:, :, 0, :]
+        # x = outputs_return[0, :]
+        #print(f'outputs size: {outputs.size()}')
         
-        final_output = self.final_layer(x)
-        final_output = final_output.squeeze(0)
+        final_output = self.final_layer(outputs)
+        final_output = final_output.squeeze(1)
         #print(f'final_output size: {final_output.size()}')
 
         # hidden_critic = self.critic(x)
@@ -424,6 +429,9 @@ def init(module, weight_init, bias_init, gain=1):
     bias_init(module.bias.data)
     return module
 
-def reshapeT(T, seq_length, nenv):
-    shape = T.size()[1:]
-    return T.unsqueeze(0).reshape((seq_length, nenv, *shape))
+# def reshapeT(T, seq_length, nenv):
+#     shape = T.size()[1:]
+#     print(f"shape is {shape}")
+#     print(f"seq_length is {seq_length}")
+#     print(f"nenv is {nenv}")
+#     return T.unsqueeze(0).reshape((seq_length, nenv, *shape))

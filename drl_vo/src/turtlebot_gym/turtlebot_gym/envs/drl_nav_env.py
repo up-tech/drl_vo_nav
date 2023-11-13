@@ -608,7 +608,14 @@ class DRLNavEnv(gym.Env):
 
     # Callback function for the cnn_data subscriber
     def _st_data_callback(self, st_data_msg):
-        self.st_data = st_data_msg
+
+        if len(st_data_msg.spatial_edges) != 120:
+            pass
+            #print("DEBUG SPATIAL_EDGES SIZE != 120")
+        else:
+            self.st_data = st_data_msg
+        # print(st_data_msg.spatial_edges)
+        # print(f"call back spatial len: {len(st_data_msg.spatial_edges)}")
 
     # Callback function for the robot pose subscriber
     def _robot_pose_callback(self, robot_pose_msg):
@@ -837,6 +844,7 @@ class DRLNavEnv(gym.Env):
         obs['spatial_edges'] = self.st_data.spatial_edges
         obs['visible_masks'] = self.st_data.visible_masks
         obs['detected_human_num'] = self.st_data.detected_human_num
+        #(f"spatial edges len: {len(obs['spatial_edges'])}")
 
         self.observation = obs
 
@@ -863,6 +871,7 @@ class DRLNavEnv(gym.Env):
         Args:
         action: 2-d numpy array.
         """
+        #print(f"action is : {action}")
         rospy.logdebug("TurtleBot2 Base Twist Cmd>>\nlinear: {}\nangular: {}".format(action[0], action[1]))
         cmd_vel = Twist()
         # distance to goal:

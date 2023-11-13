@@ -6,7 +6,7 @@
   </node>
 
   <!-- CNN Data  Publisher -->
-  <node name="st_data_pub" pkg="drl_vo_nav" type="st_data_pub.py"/>
+  <node name="st_data_pub" pkg="drl_vo_nav" type="st_data_pub.py" output="screen"/>
 
   <!-- Robot Pose Publisher -->
   <node name="robot_pose_pub" pkg="drl_vo_nav" type="robot_pose_pub.py"/>

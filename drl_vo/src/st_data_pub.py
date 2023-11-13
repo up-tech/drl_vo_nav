@@ -15,12 +15,15 @@ from st_msgs.msg import ST_data
 from geometry_msgs.msg import Point, PoseStamped, Twist, TwistStamped
 from pedsim_msgs.msg import TrackedPerson, TrackedPersons
 from sensor_msgs.msg import LaserScan
+import threading
 
 # parameters:
 NUM_TP = 10     # the number of timestamps
 NUM_PEDS = 10 # the number of total pedestrians
 PREDICTION_NUM = 5 # the number of dredict pose
 SENSOR_RANGE = 5.0 #sensor range
+
+data_lock = threading.Lock()
 
 class STData:
     # Constructor
@@ -57,6 +60,7 @@ class STData:
         
     # Callback function for the pedestrian subscriber
     def ped_callback(self, trackPed_msg):
+        data_lock.acquire()
         # get the pedstrain's position:
         # self.spatial_edges = np.zeros((PREDICTION_NUM + 1) * NUM_PEDS)
         time_step = 1.0 / NUM_TP
@@ -76,22 +80,30 @@ class STData:
                     x = x + vx * time_step * (i + 1)
                     y = y + vy * time_step * (i + 1)
                     self.spatial_edges.extend([x, y])
-        self.detected_human_num[0] = self.visible_masks.count(True)
+        if self.visible_masks.count(True) == 0:
+            self.detected_human_num[0] = 1
+        else:
+            self.detected_human_num[0] = self.visible_masks.count(True)
+        data_lock.release()
 
     # Callback function for the current goal subscriber
     def goal_callback(self, goal_msg):
         # Cartesian coordinate:
+        data_lock.acquire()
         self.robot_node[0] = goal_msg.x
         self.robot_node[1] = goal_msg.y
         self.robot_node[2] = self.robot_radius
         self.robot_node[3] = self.v_pref
         self.robot_node[4] = self.theta
+        data_lock.release()
 
     # Callback function for the velocity subscriber
     # vx theta
     def vel_callback(self, vel_msg):
+        data_lock.acquire()
         self.temporal_edges[0] = vel_msg.linear.x
         self.temporal_edges[1] = vel_msg.angular.z
+        data_lock.release()
         
     def dist_to_robot(self, x, y):
         dist = np.linalg.norm([x, y])
@@ -99,6 +111,7 @@ class STData:
     
     def scan_callback(self, laserScan_msg):
         # get the laser scan data:
+        data_lock.acquire()
         self.scan_tmp = np.zeros(720)
         self.scan_all_tmp = np.zeros(1080)
         scan_data = np.array(laserScan_msg.ranges, dtype=np.float32)
@@ -106,11 +119,10 @@ class STData:
         scan_data[np.isinf(scan_data)] = 0.
         self.scan_tmp = scan_data[180:900]
         self.scan_all_tmp = scan_data
-
-        print("debug scan callback")
+        data_lock.release()
 
     def timer_callback(self, event):
-
+        data_lock.acquire()
         self.scan.append(self.scan_tmp.tolist())
         self.scan_all = self.scan_all_tmp
         
@@ -121,8 +133,9 @@ class STData:
         st_data.visible_masks = self.visible_masks
         st_data.detected_human_num = self.detected_human_num
         st_data.scan = [float(val) for sublist in self.scan for val in sublist]
-        
-        print(st_data)
+        data_lock.release()
+
+        #print(f"spatial data pub len {len(st_data.spatial_edges)}")
 
         self.st_data_pub.publish(st_data)
 
