@@ -21,11 +21,11 @@ import message_filters
 
 # custom define messages:
 from sensor_msgs.msg import LaserScan
-from cnn_msgs.msg import CNN_data
+from st_msgs.msg import ST_data
 from geometry_msgs.msg import Twist
 from geometry_msgs.msg import Point
 from stable_baselines3 import PPO
-from custom_cnn_full import *
+from st_network import *
 
 
 #-----------------------------------------------------------------------------
@@ -38,7 +38,7 @@ from custom_cnn_full import *
 # for reproducibility, we seed the rng
 #       
 policy_kwargs = dict(
-    features_extractor_class=CustomCNN,
+    features_extractor_class=selfAttn_merge_SRNN,
     features_extractor_kwargs=dict(features_dim=256),
 )
 
@@ -64,15 +64,23 @@ class DrlInference:
         print("Finish loading model.")
 
         # initialize ROS objects
-        self.cnn_data_sub = rospy.Subscriber("/cnn_data", CNN_data, self.cnn_data_callback)
+        self.st_data_sub = rospy.Subscriber("/st_data", ST_data, self.st_data_callback)
         self.cmd_vel_pub = rospy.Publisher('/drl_cmd_vel', Twist, queue_size=10, latch=False)
+
+        # d = {}
+        # d['robot_node'] = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1, 5,), dtype=np.float32)
+        # d['temporal_edges'] = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1, 2,), dtype=np.float32)
+        # self.spatial_edge_dim = int(2*(self.predict_steps+1))
+        # d['spatial_edges'] = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.human_num * self.spatial_edge_dim, ), dtype=np.float32)
+        # d['detected_human_num'] = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32)
+        # self.observation_space = gym.spaces.Dict(d)
 
 
     # Callback function for the cnn_data subscriber
-    def cnn_data_callback(self, cnn_data_msg):
-        self.ped_pos = cnn_data_msg.ped_pos_map
-        self.scan = cnn_data_msg.scan
-        self.goal = cnn_data_msg.goal_cart
+    def st_data_callback(self, st_data_msg):
+        #self.ped_pos = st_data_msg.spatial_edges
+        self.scan = st_data_msg.scan
+        self.goal = st_data_msg.robot_node[ : 2]
         cmd_vel = Twist()
 
         # minimum distance:
@@ -94,35 +102,43 @@ class DrlInference:
             # MaxAbsScaler:
             v_min = -2 
             v_max = 2 
-            self.ped_pos = np.array(self.ped_pos, dtype=np.float32)
-            self.ped_pos = 2 * (self.ped_pos - v_min) / (v_max - v_min) + (-1)
+            # self.ped_pos = np.array(self.ped_pos, dtype=np.float32)
+            # self.ped_pos = 2 * (self.ped_pos - v_min) / (v_max - v_min) + (-1)
 
             # MaxAbsScaler:
-            temp = np.array(self.scan, dtype=np.float32)
-            scan_avg = np.zeros((20,80))
-            for n in range(10):
-                scan_tmp = temp[n*720:(n+1)*720]
-                for i in range(80):
-                    scan_avg[2*n, i] = np.min(scan_tmp[i*9:(i+1)*9])
-                    scan_avg[2*n+1, i] = np.mean(scan_tmp[i*9:(i+1)*9])
+            # temp = np.array(self.scan, dtype=np.float32)
+            # scan_avg = np.zeros((20,80))
+            # for n in range(10):
+            #     scan_tmp = temp[n*720:(n+1)*720]
+            #     for i in range(80):
+            #         scan_avg[2*n, i] = np.min(scan_tmp[i*9:(i+1)*9])
+            #         scan_avg[2*n+1, i] = np.mean(scan_tmp[i*9:(i+1)*9])
             
-            scan_avg = scan_avg.reshape(1600)
-            scan_avg_map = np.matlib.repmat(scan_avg,1,4)
-            self.scan = scan_avg_map.reshape(6400)
-            s_min = 0
-            s_max = 30
-            self.scan = 2 * (self.scan - s_min) / (s_max - s_min) + (-1)
+            # scan_avg = scan_avg.reshape(1600)
+            # scan_avg_map = np.matlib.repmat(scan_avg,1,4)
+            # self.scan = scan_avg_map.reshape(6400)
+            # s_min = 0
+            # s_max = 30
+            # self.scan = 2 * (self.scan - s_min) / (s_max - s_min) + (-1)
             
-            # goal:
-            # MaxAbsScaler:
-            g_min = -2
-            g_max = 2
-            goal_orignal = np.array(self.goal, dtype=np.float32)
-            self.goal = 2 * (goal_orignal - g_min) / (g_max - g_min) + (-1)
+            # # goal:
+            # # MaxAbsScaler:
+            # g_min = -2
+            # g_max = 2
+            # goal_orignal = np.array(self.goal, dtype=np.float32)
+            # self.goal = 2 * (goal_orignal - g_min) / (g_max - g_min) + (-1)
             #self.goal = self.goal.tolist()
 
-            # observation:
-            self.observation = np.concatenate((self.ped_pos, self.scan, self.goal), axis=None) 
+            obs = {}
+
+            obs['robot_node'] = torch.tensor(st_data_msg.robot_node).unsqueeze(0)
+            obs['temporal_edges'] = torch.tensor(st_data_msg.temporal_edges).unsqueeze(0)
+            obs['spatial_edges'] = torch.tensor(st_data_msg.spatial_edges)
+            obs['visible_masks'] = torch.tensor(st_data_msg.visible_masks)
+            obs['detected_human_num'] = torch.tensor(st_data_msg.detected_human_num)
+
+            self.observation = obs
+            print(self.observation)
 
             #self.inference()
             action, _states = self.model.predict(self.observation)
@@ -135,7 +151,6 @@ class DrlInference:
             cmd_vel.linear.x = (action[0] + 1) * (vx_max - vx_min) / 2 + vx_min
             cmd_vel.angular.z = (action[1] + 1) * (vz_max - vz_min) / 2 + vz_min
         
-
         if not np.isnan(cmd_vel.linear.x) and not np.isnan(cmd_vel.angular.z): # ensure data is valid
             self.cmd_vel_pub.publish(cmd_vel)
 
