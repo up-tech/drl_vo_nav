@@ -123,6 +123,7 @@ class STData:
 
     def timer_callback(self, event):
         data_lock.acquire()
+        self.scan.clear()
         self.scan.append(self.scan_tmp.tolist())
         self.scan_all = self.scan_all_tmp
         

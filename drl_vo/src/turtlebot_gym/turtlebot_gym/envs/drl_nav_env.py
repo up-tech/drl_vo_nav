@@ -611,7 +611,7 @@ class DRLNavEnv(gym.Env):
 
         if len(st_data_msg.spatial_edges) != 120:
             pass
-            #print("DEBUG SPATIAL_EDGES SIZE != 120")
+            print("DEBUG SPATIAL_EDGES SIZE != 120")
         else:
             self.st_data = st_data_msg
         # print(st_data_msg.spatial_edges)
@@ -903,7 +903,7 @@ class DRLNavEnv(gym.Env):
         """
         # reward parameters:
         r_arrival = 1 #15
-        #r_waypoint = 3.2 #2.5 #1.6 #2 #3 #1.6 #6 #2.5 #2.5
+        r_waypoint = 0.2 #2.5 #1.6 #2 #3 #1.6 #6 #2.5 #2.5
         r_collision = -0.25 #-15
         #r_scan = -0.2 #-0.15 #-0.3
         #r_angle = 0.6 #0.5 #1 #0.8 #1 #0.5
@@ -914,7 +914,7 @@ class DRLNavEnv(gym.Env):
 
         # reward parts:
 
-        r_g = self._goal_reached_reward(r_arrival)
+        r_g = self._goal_reached_reward(r_arrival, r_waypoint)
         r_c = self._obstacle_collision_punish(self.st_data.scan[-720:], r_collision)
         #r_w = self._angular_velocity_punish(self.curr_vel.angular.z,  r_rotation, w_thresh)
         #r_t = self._theta_reward(self.goal, self.mht_peds, self.curr_vel.linear.x, r_angle, angle_thresh)
@@ -924,7 +924,7 @@ class DRLNavEnv(gym.Env):
 
         return reward
     
-    def _goal_reached_reward(self, r_arrival):
+    def _goal_reached_reward(self, r_arrival, r_waypoint):
         """
         Returns positive reward if the robot reaches the goal.
         :param transformed_goal goal position in robot frame
@@ -939,30 +939,26 @@ class DRLNavEnv(gym.Env):
             self.curr_pose.position.z - self.goal_position.z
             ])
         )
-        reward = 0
+        # t-1 id:
+        t_1 = self.num_iterations % self.DIST_NUM
+        # initialize the dist_to_goal_reg:
+        if(self.num_iterations == 0):
+            self.dist_to_goal_reg = np.ones(self.DIST_NUM)*dist_to_goal
+
+        rospy.logwarn("distance_to_goal_reg = {}".format(self.dist_to_goal_reg[t_1]))
+        rospy.logwarn("distance_to_goal = {}".format(dist_to_goal))
+        max_iteration = 512 #800 
+        # reward calculation:
         if(dist_to_goal <= self.GOAL_RADIUS):  # goal reached: t = T
             reward = r_arrival
-            
-        # # t-1 id:
-        # t_1 = self.num_iterations % self.DIST_NUM
-        # # initialize the dist_to_goal_reg:
-        # if(self.num_iterations == 0):
-        #     self.dist_to_goal_reg = np.ones(self.DIST_NUM)*dist_to_goal
+        elif(self.num_iterations >= max_iteration):  # failed to the goal
+            reward = -r_arrival
+        else:   # on the way
+            reward = r_waypoint*(self.dist_to_goal_reg[t_1] - dist_to_goal)
 
-        # rospy.logwarn("distance_to_goal_reg = {}".format(self.dist_to_goal_reg[t_1]))
-        # rospy.logwarn("distance_to_goal = {}".format(dist_to_goal))
-        # max_iteration = 512 #800 
-        # # reward calculation:
-        # if(dist_to_goal <= self.GOAL_RADIUS):  # goal reached: t = T
-        #     reward = r_arrival
-        # elif(self.num_iterations >= max_iteration):  # failed to the goal
-        #     reward = -r_arrival
-        # else:   # on the way
-        #     reward = r_waypoint*(self.dist_to_goal_reg[t_1] - dist_to_goal)
-
-        # # storage the robot pose at t-1:
-        # #if(self.num_iterations % 40 == 0):
-        # self.dist_to_goal_reg[t_1] = dist_to_goal #self.curr_pose
+        # storage the robot pose at t-1:
+        #if(self.num_iterations % 40 == 0):
+        self.dist_to_goal_reg[t_1] = dist_to_goal #self.curr_pose
     
         rospy.logwarn("Goal reached reward: {}".format(reward))
         return reward
@@ -975,7 +971,7 @@ class DRLNavEnv(gym.Env):
         :return: returns reward colliding with obstacles
         """
 
-        min_scan_dist = np.amin(scan[scan!=0])
+        min_scan_dist = np.amin(scan)
         #if(self.bump_flag == True): #or self.pos_valid_flag == False):
         if(min_scan_dist <= self.ROBOT_RADIUS and min_scan_dist >= 0.02):
             reward = r_collision
@@ -1086,11 +1082,9 @@ class DRLNavEnv(gym.Env):
             rospy.logwarn("\n!!!\nTurtlebot went to the goal\n!!!")
             return True
         
-
-
         # 2) Obstacle collision?
         scan = self.st_data.scan[-720:]
-        min_scan_dist = np.amin(scan[scan!=0])
+        min_scan_dist = np.amin(scan)
         #if(self.bump_flag == True): #or self.pos_valid_flag == False):
         if(min_scan_dist <= self.ROBOT_RADIUS and min_scan_dist >= 0.02):
             self.bump_num += 1
@@ -1104,7 +1098,6 @@ class DRLNavEnv(gym.Env):
             self._reset = True # reset the simulation world
             rospy.logwarn("TurtleBot collided to obstacles many times before going to the goal @ {}...".format(self.goal_position))
             return True
-
 
         # 4) maximum number of iterations?
         max_iteration = 512 #800 # 34 pedestrians: 3000: 5m; no pedestrians: 800: 3m
