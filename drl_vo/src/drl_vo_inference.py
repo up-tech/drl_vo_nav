@@ -83,21 +83,10 @@ class DrlInference:
         self.goal = st_data_msg.robot_node[ : 2]
         cmd_vel = Twist()
 
-        # minimum distance:
-        scan = np.array(self.scan[-540:-180])
-        scan = scan[scan!=0]
-        if(scan.size!=0):
-            min_scan_dist = np.amin(scan)
-        else:
-            min_scan_dist = 10
-
         # if the goal is close to the robot:
         if(np.linalg.norm(self.goal) <= 0.9):  # goal margin
                 cmd_vel.linear.x = 0
                 cmd_vel.angular.z = 0
-        elif(min_scan_dist <= 0.4): # obstacle margin
-            cmd_vel.linear.x = 0
-            cmd_vel.angular.z = 0.7
         else:
             # MaxAbsScaler:
             v_min = -2 
@@ -138,7 +127,7 @@ class DrlInference:
             obs['detected_human_num'] = torch.tensor(st_data_msg.detected_human_num)
 
             self.observation = obs
-            print(self.observation)
+
 
             #self.inference()
             action, _states = self.model.predict(self.observation)
@@ -150,6 +139,7 @@ class DrlInference:
             vz_max = 2 # 0.7
             cmd_vel.linear.x = (action[0] + 1) * (vx_max - vx_min) / 2 + vx_min
             cmd_vel.angular.z = (action[1] + 1) * (vz_max - vz_min) / 2 + vz_min
+            print(f"cmd_vel x: {cmd_vel.linear.x}, cmd_vel z: {cmd_vel.angular.z}")
         
         if not np.isnan(cmd_vel.linear.x) and not np.isnan(cmd_vel.angular.z): # ensure data is valid
             self.cmd_vel_pub.publish(cmd_vel)

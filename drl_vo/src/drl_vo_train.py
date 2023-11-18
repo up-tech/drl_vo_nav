@@ -95,7 +95,7 @@ policy_kwargs = dict(
 
 # raw training:
 model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs, learning_rate=1e-3, verbose=2, 
-            tensorboard_log=log_dir, n_steps=256, n_epochs=5, batch_size=64)
+            tensorboard_log=log_dir, n_steps=256, n_epochs=5, batch_size=64, ent_coef=0.005)
 # model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs, learning_rate=1e-3, verbose=1, 
 #             tensorboard_log=log_dir)
 

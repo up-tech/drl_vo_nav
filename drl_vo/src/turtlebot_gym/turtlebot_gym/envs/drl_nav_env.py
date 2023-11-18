@@ -104,6 +104,7 @@ class DRLNavEnv(gym.Env):
         self.init_pose = Pose()
         self.curr_pose = Pose()
         self.curr_vel = Twist()
+        self.curr_vz = 0.0
         self.goal_position = Point()
         self.info = {}
         # episode done flag:
@@ -884,6 +885,7 @@ class DRLNavEnv(gym.Env):
         vz_max = 2 #3
         cmd_vel.linear.x = (action[0] + 1) * (vx_max - vx_min) / 2 + vx_min
         cmd_vel.angular.z = (action[1] + 1) * (vz_max - vz_min) / 2 + vz_min
+        self.curr_vz = cmd_vel.angular.z
         #self._check_publishers_connection()
     
         rate = rospy.Rate(20)
@@ -902,23 +904,28 @@ class DRLNavEnv(gym.Env):
         """Calculates the reward to give based on the observations given.
         """
         # reward parameters:
-        r_arrival = 1 #15
-        r_waypoint = 0.2 #2.5 #1.6 #2 #3 #1.6 #6 #2.5 #2.5
-        r_collision = -0.25 #-15
+        r_arrival = 20 #15
+        r_waypoint = 3 #2.5 #1.6 #2 #3 #1.6 #6 #2.5 #2.5
+        r_collision = -10 #-15
         #r_scan = -0.2 #-0.15 #-0.3
         #r_angle = 0.6 #0.5 #1 #0.8 #1 #0.5
-        #r_rotation = -0.1 #-0.15 #-0.4 #-0.5 #-0.2 # 0.1
+        #r_rotation = -1 #-0.15 #-0.4 #-0.5 #-0.2 # 0.1
+        r_accelerate = -0.1
 
         angle_thresh = np.pi/6
-        w_thresh = 1 # 0.7
+        w_thresh = 0.7 # 0.7
+        accelerate_thresh = 0.3
 
         # reward parts:
 
         r_g = self._goal_reached_reward(r_arrival, r_waypoint)
         r_c = self._obstacle_collision_punish(self.st_data.scan[-720:], r_collision)
-        #r_w = self._angular_velocity_punish(self.curr_vel.angular.z,  r_rotation, w_thresh)
+
+        # r_w = self._angular_velocity_punish(self.curr_vel.angular.z, r_rotation, w_thresh)
+        r_a = self._angular_accelerate_punish(self.curr_vel.angular.z, self.curr_vz, r_accelerate, accelerate_thresh)
+
         #r_t = self._theta_reward(self.goal, self.mht_peds, self.curr_vel.linear.x, r_angle, angle_thresh)
-        reward = r_g + r_c #+ r_t #+ r_w #+ r_v #+ r_p
+        reward = r_g + r_c + r_a
         #rospy.logwarn("Current Velocity: \ncurr_vel = {}".format(self.curr_vel.linear.x))
         rospy.logwarn("Compute reward done. \nreward = {}".format(reward))
 
@@ -945,14 +952,15 @@ class DRLNavEnv(gym.Env):
         if(self.num_iterations == 0):
             self.dist_to_goal_reg = np.ones(self.DIST_NUM)*dist_to_goal
 
-        rospy.logwarn("distance_to_goal_reg = {}".format(self.dist_to_goal_reg[t_1]))
-        rospy.logwarn("distance_to_goal = {}".format(dist_to_goal))
+        # rospy.logwarn("distance_to_goal_reg = {}".format(self.dist_to_goal_reg[t_1]))
+        # rospy.logwarn("distance_to_goal = {}".format(dist_to_goal))
+
         max_iteration = 512 #800 
         # reward calculation:
         if(dist_to_goal <= self.GOAL_RADIUS):  # goal reached: t = T
             reward = r_arrival
-        elif(self.num_iterations >= max_iteration):  # failed to the goal
-            reward = -r_arrival
+        # elif(self.num_iterations >= max_iteration):  # failed to the goal
+        #     reward = -r_arrival
         else:   # on the way
             reward = r_waypoint*(self.dist_to_goal_reg[t_1] - dist_to_goal)
 
@@ -983,7 +991,7 @@ class DRLNavEnv(gym.Env):
         rospy.logwarn("Obstacle collision reward: {}".format(reward))
         return reward
 
-    def _angular_velocity_punish(self, w_z,  r_rotation, w_thresh):
+    def _angular_velocity_punish(self, w_z, r_rotation, w_thresh):
         """
         Returns negative reward if the robot turns.
         :param w roatational speed of the robot
@@ -993,6 +1001,15 @@ class DRLNavEnv(gym.Env):
         """
         if(abs(w_z) > w_thresh):
             reward = abs(w_z) * r_rotation
+        else:
+            reward = 0.0
+
+        rospy.logwarn("Angular velocity punish reward: {}".format(reward))
+        return reward
+
+    def _angular_accelerate_punish(self, curr_z, curr_vz, r_accelerate, accelerate_thresh):
+        if(abs(curr_z - curr_vz) > accelerate_thresh):
+            reward = abs(curr_z - curr_vz) * r_accelerate
         else:
             reward = 0.0
 
