@@ -96,7 +96,7 @@ policy_kwargs = dict(
 #model = PPO("CnnPolicy", env, policy_kwargs=policy_kwargs, learning_rate=1e-3, verbose=2, tensorboard_log=log_dir, n_steps=512, n_epochs=10, batch_size=128) #, gamma=0.96, ent_coef=0.1, vf_coef=0.4) 
 
 # continue training:
-kwargs = {'tensorboard_log':log_dir, 'verbose':2, 'n_epochs':10, 'n_steps':512, 'batch_size':128,'learning_rate':5e-5}
+kwargs = {'tensorboard_log':log_dir, 'verbose':2, 'n_epochs':5, 'n_steps':256, 'batch_size':64,'learning_rate':5e-5}
 model_file = rospy.get_param('~model_file', "./model/drl_pre_train.zip")
 model = PPO.load(model_file, env=env, **kwargs)
 

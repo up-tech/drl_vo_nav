@@ -15,7 +15,7 @@ import math
 from scipy.optimize import linprog, minimize
 import threading
 
-#import itertools 
+#import itertools
 import rospy
 import gym # https://github.com/openai/gym/blob/master/gym/core.py
 from gym.utils import seeding
@@ -35,7 +35,7 @@ from cnn_msgs.msg import CNN_data
 
 
 
-class DRLNavEnv(gym.Env):
+class DRLNavDojoEnv(gym.Env):
     """
     Gazebo env converts standard openai gym methods into Gazebo commands
 
@@ -47,7 +47,7 @@ class DRLNavEnv(gym.Env):
     """
     def __init__(self):
         # To reset Simulations
-        rospy.logdebug("START init DRLNavEnv")
+        rospy.logdebug("START init DRLNavDojoEnv")
         self.seed()
 
         # robot parameters:
@@ -79,7 +79,7 @@ class DRLNavEnv(gym.Env):
         self.scan = []
         self.goal = []
         #self.vel = []
-       
+
         # self.observation_space = spaces.Box(low=-30, high=30, shape=(6402,), dtype=np.float32)
         # MaxAbsScaler: normalize to (-1,1)
         self.observation_space = spaces.Box(low=-1, high=1, shape=(19202,), dtype=np.float32)
@@ -101,8 +101,8 @@ class DRLNavEnv(gym.Env):
 
         # To reset Simulations
         self.gazebo = GazeboConnection(
-        start_init_physics_parameters=True,
-        reset_world_or_sim= "WORLD" #"SIMULATION" #
+            start_init_physics_parameters=True,
+            reset_world_or_sim= "WORLD" #"SIMULATION" #
         )
 
         self.gazebo.unpauseSim()
@@ -133,10 +133,10 @@ class DRLNavEnv(gym.Env):
 
         # self.controllers_object.reset_controllers()
         self._check_all_systems_ready()
-        self.gazebo.pauseSim()   
-            
+        self.gazebo.pauseSim()
+
         rospy.logdebug("Finished TurtleBot2Env INIT...")
-        
+
 
     # Env methods
     def seed(self, seed=None):
@@ -161,8 +161,8 @@ class DRLNavEnv(gym.Env):
         return obs, reward, done, info
 
     def reset(self):
-        """ 
-        obs, info = env.reset() 
+        """
+        obs, info = env.reset()
         """
         # self.gazebo.pauseSim()
         rospy.logdebug("Reseting RobotGazeboEnvironment")
@@ -191,15 +191,15 @@ class DRLNavEnv(gym.Env):
         self.gazebo.pauseSim()
         rospy.logdebug("END robot gazebo _reset_sim")
         return True
-    
+
     def _set_init(self):
-        """ 
+        """
         Set initial condition for simulation
         1. Set turtlebot at a random pose inside playground by publishing /gazebo/set_model_state topic
         2. Set a goal point inside playground for red ball
-        Returns: 
-        init_position: array([x, y]) 
-        goal_position: array([x, y])      
+        Returns:
+        init_position: array([x, y])
+        goal_position: array([x, y])
         """
         rospy.logdebug("Start initializing robot...")
         # reset the robot velocity to 0:
@@ -207,7 +207,7 @@ class DRLNavEnv(gym.Env):
 
         #self._reset = True
         # reset simulation to orignal:
-        if(self._reset): 
+        if(self._reset):
             self._reset = False
             '''
             self.navigation_launcher.restart()
@@ -215,14 +215,14 @@ class DRLNavEnv(gym.Env):
             time.sleep(6)
             '''
             self._check_all_systems_ready()
-            
+
             # self.gazebo.resetSim()
             # test whether robot pose is in the map free space:
             self.pos_valid_flag = False
             map = self.map
             while not self.pos_valid_flag:
                 # initialize the robot pose:
-                seed_initial_pose = random.randint(0, 18)
+                seed_initial_pose = random.randint(0, 9)
                 self._set_initial_pose(seed_initial_pose)
                 # wait for the initial process is ok:
                 time.sleep(4)
@@ -231,14 +231,14 @@ class DRLNavEnv(gym.Env):
                 y = self.curr_pose.position.y
                 radius = self.ROBOT_RADIUS
                 self.pos_valid_flag = self._is_pos_valid(x, y, radius, map)
-                
+
         # publish inital goal:
         [goal_x, goal_y, goal_yaw] = self._publish_random_goal()
 
         #[goal_x, goal_y, goal_yaw] = [3, 3, 0]
         #self._publish_goal(3, 3, 0)
 
-        time.sleep(1)    
+        time.sleep(1)
         self._check_all_systems_ready()
 
         # initalize info:
@@ -266,7 +266,7 @@ class DRLNavEnv(gym.Env):
         # start the timer if this is the first path received
         #if self.check_timer is None:
         #    self.check_start()
-        
+
         return self.init_pose, self.goal_position
 
     def _set_initial_pose(self, seed_initial_pose):
@@ -281,34 +281,34 @@ class DRLNavEnv(gym.Env):
                 self._reset_odom_pub.publish(Empty())
             '''
             # reset robot inital pose in rviz:
-            self._pub_initial_position(1, 0, 0.1377)
+            self._pub_initial_position(1, 1, 0)
         elif(seed_initial_pose == 1):
             # set turtlebot initial pose in gazebo:
-            self._pub_initial_model_state(14, 7, 1.5705)
+            self._pub_initial_model_state(2.5, 0, 1.57)
             time.sleep(1)
             '''
             # reset robot odometry:
             timer = time.time()
             while time.time() - timer < 0.5:
                 self._reset_odom_pub.publish(Empty())     
-            ''' 
+            '''
             # reset robot inital pose in rviz:
-            self._pub_initial_position(12.61, 7.5, 1.70)
+            self._pub_initial_position(2.5, 0, 1.57)
         elif(seed_initial_pose == 2):
             # set turtlebot initial pose in gazebo:
-            self._pub_initial_model_state(1, 16, 0)
+            self._pub_initial_model_state(-2, 1, 0)
             time.sleep(1)
             '''
             # reset robot odometry:
             timer = time.time()
             while time.time() - timer < 0.5:
                 self._reset_odom_pub.publish(Empty())   
-            '''     
+            '''
             # reset robot inital pose in rviz:
-            self._pub_initial_position(-1, 14.5, 0.13)
+            self._pub_initial_position(-2, 1, 0)
         elif(seed_initial_pose == 3):
             # set turtlebot initial pose in gazebo:
-            self._pub_initial_model_state(14, 22.5, -1.3113)
+            self._pub_initial_model_state(3, 5, -1.3113)
             time.sleep(1)
             '''
             # reset robot odometry:
@@ -317,10 +317,10 @@ class DRLNavEnv(gym.Env):
               self._reset_odom_pub.publish(Empty())
             '''
             # reset robot inital pose in rviz:
-            self._pub_initial_position(10.7, 23, -1.16)
+            self._pub_initial_position(3, 5, -1.3113)
         elif(seed_initial_pose == 4):
             # set turtlebot initial pose in gazebo:
-            self._pub_initial_model_state(4, 4, 1.5705)
+            self._pub_initial_model_state(4, -4, 1.5705)
             time.sleep(1)
             '''
             # reset robot odometry:
@@ -329,10 +329,10 @@ class DRLNavEnv(gym.Env):
                 self._reset_odom_pub.publish(Empty())
             '''
             # reset robot inital pose in rviz:
-            self._pub_initial_position(3.6, 3.1, 1.70)
+            self._pub_initial_position(4, -4, 1.5705)
         elif(seed_initial_pose == 5):
             # set turtlebot initial pose in gazebo:
-            self._pub_initial_model_state(2, 9, 0)
+            self._pub_initial_model_state(-3, 2, 0)
             time.sleep(1)
             '''
             # reset robot odometry:
@@ -341,10 +341,10 @@ class DRLNavEnv(gym.Env):
                 self._reset_odom_pub.publish(Empty())
             '''
             # reset robot inital pose in rviz:
-            self._pub_initial_position(1, 8, 0.13)
+            self._pub_initial_position(-3, 2, 0)
         elif(seed_initial_pose == 6):
             # set turtlebot initial pose in gazebo:
-            self._pub_initial_model_state(30, 9, 3.14)
+            self._pub_initial_model_state(5, -3, 3.14)
             time.sleep(1)
             '''
             # reset robot odometry:
@@ -353,10 +353,10 @@ class DRLNavEnv(gym.Env):
                 self._reset_odom_pub.publish(Empty())
             '''
             # reset robot inital pose in rviz:
-            self._pub_initial_position(28, 11.4, 3.25)
+            self._pub_initial_position(5, -3, 3.14)
         elif(seed_initial_pose == 7):
             # set turtlebot initial pose in gazebo:
-            self._pub_initial_model_state(25, 17, 3.14)
+            self._pub_initial_model_state(-3, 0, 3.14)
             time.sleep(1)
             '''
             # reset robot odometry:
@@ -365,10 +365,10 @@ class DRLNavEnv(gym.Env):
                 self._reset_odom_pub.publish(Empty())
             '''
             # reset robot inital pose in rviz:
-            self._pub_initial_position(22.5, 18.8, 3.25)
+            self._pub_initial_position(-3, 0, 3.14)
         elif(seed_initial_pose == 8):
             # set turtlebot initial pose in gazebo:
-            self._pub_initial_model_state(5, 8, 0)
+            self._pub_initial_model_state(0, 4, 0)
             time.sleep(1)
             '''
             # reset robot odometry:
@@ -377,10 +377,10 @@ class DRLNavEnv(gym.Env):
                 self._reset_odom_pub.publish(Empty())
             '''
             # reset robot inital pose in rviz:
-            self._pub_initial_position(3.96, 7.47, 0.137)
+            self._pub_initial_position(0, 4, 0)
         elif(seed_initial_pose == 9):
             # set turtlebot initial pose in gazebo:
-            self._pub_initial_model_state(10, 12, 0)
+            self._pub_initial_model_state(0, -1, 2)
             time.sleep(1)
             '''
             # reset robot odometry:
@@ -389,7 +389,7 @@ class DRLNavEnv(gym.Env):
                 self._reset_odom_pub.publish(Empty())
             '''
             # reset robot inital pose in rviz:
-            self._pub_initial_position(8.29, 12.07, 0.116)
+            self._pub_initial_position(0, -1, 2)
         elif(seed_initial_pose == 10):
             # set turtlebot initial pose in gazebo:
             self._pub_initial_model_state(14, 15, 1.576)
@@ -528,7 +528,7 @@ class DRLNavEnv(gym.Env):
         Waits for a sensor topic to get ready for connection
         """
         var = None
-        rospy.logdebug("Waiting for '%s' to be READY...", name)        
+        rospy.logdebug("Waiting for '%s' to be READY...", name)
         while var is None and not rospy.is_shutdown():
             try:
                 var = rospy.wait_for_message(name, type, timeout)
@@ -536,7 +536,7 @@ class DRLNavEnv(gym.Env):
             except:
                 rospy.logfatal('Sensor topic "%s" is not available. Waiting...', name)
         return var
-    
+
     # check publishers ready:
     def _check_all_publishers_ready(self):
         rospy.logdebug("START TO CHECK ALL PUBLISHERS READY")
@@ -552,10 +552,10 @@ class DRLNavEnv(gym.Env):
         """
         Waits for a publisher to get response
         """
-        rospy.logdebug("Waiting for '%s' to get response...", name) 
+        rospy.logdebug("Waiting for '%s' to get response...", name)
         start_time = rospy.Time.now()
         while obj.get_num_connections() == 0 and not rospy.is_shutdown():
-                rospy.logfatal('No subscriber found for publisher %s. Exiting', name)
+            rospy.logfatal('No subscriber found for publisher %s. Exiting', name)
         rospy.logdebug("'%s' Publisher Connected", name)
 
     def _check_service_ready(self, name, timeout=5.0):
@@ -597,7 +597,7 @@ class DRLNavEnv(gym.Env):
         :return:
         """
         self.curr_pose = robot_pose_msg.pose
-    
+
     # Callback function for the robot velocity subscriber
     def _robot_vel_callback(self, robot_vel_msg):
         """
@@ -626,7 +626,7 @@ class DRLNavEnv(gym.Env):
         """
         self.model_states = model_states_msg
     '''
-   
+
     '''
     # Callback function for the bumper subscriber
     def _bumper_callback(self, bumper_msg):
@@ -652,16 +652,16 @@ class DRLNavEnv(gym.Env):
         if(len(goal_status_msg.status_list) > 0):
             last_element = goal_status_msg.status_list[-1]
             rospy.logwarn(last_element.text)
-            if(last_element.status == 3): # succeeded 
+            if(last_element.status == 3): # succeeded
                 self._goal_reached = True
             else:
-                self._goal_reached = False  
+                self._goal_reached = False
         else:
-            self._goal_reached = False       
+            self._goal_reached = False
         return
 
     # Callback function for the pedestrian subscriber
-    def _ped_callback(self, trackPed_msg): 
+    def _ped_callback(self, trackPed_msg):
         self.mht_peds = trackPed_msg
 
     # ----------------------------
@@ -670,7 +670,7 @@ class DRLNavEnv(gym.Env):
     # ----------------------------
     def _pub_initial_model_state(self, x, y, theta):
         """
-        Publishing new initial position (x, y, theta) 
+        Publishing new initial position (x, y, theta)
         :param x x-position of the robot
         :param y y-position of the robot
         :param theta theta-position of the robot
@@ -692,7 +692,7 @@ class DRLNavEnv(gym.Env):
             result = self._set_robot_state_service(robot_state)
             rospy.logwarn("set the model state successfully")
         except rospy.ServiceException:
-            rospy.logwarn("/gazebo/set_model_state service call failed")   
+            rospy.logwarn("/gazebo/set_model_state service call failed")
 
     def _pub_initial_position(self, x, y, theta):
         """
@@ -718,17 +718,17 @@ class DRLNavEnv(gym.Env):
         Publishing new random goal [x, y, theta] for global planner
         :return: goal position [x, y, theta]
         """
-        dis_diff = 21
+        dis_diff = 20
         # only select the random goal in range of 20 m:
         while(dis_diff >= 7 or dis_diff < 4.2): # or dis_diff < 1):
             x, y, theta = self._get_random_pos_on_map(self.map)
             # distance difference：
             dis_diff = np.linalg.norm(
                 np.array([
-                self.curr_pose.position.x - x,
-                self.curr_pose.position.y - y,
-                ])
-                )
+                    self.curr_pose.position.x - x,
+                    self.curr_pose.position.y - y,
+                    ])
+            )
         self._publish_goal(x, y, theta)
         return x, y, theta
 
@@ -781,7 +781,7 @@ class DRLNavEnv(gym.Env):
         Checks if position (x,y) is a valid position on the map.
         :param  x: x-position
         :param  y: y-position
-        :param  radius: the safe radius of the robot 
+        :param  radius: the safe radius of the robot
         :param  map
         :return: True if position is valid
         """
@@ -813,7 +813,7 @@ class DRLNavEnv(gym.Env):
         self.scan = self.cnn_data.scan
         self.goal = self.cnn_data.goal_cart
         self.vel = self.cnn_data.vel
-        
+
         # ped map:
         # MaxAbsScaler:
         v_min = -2
@@ -830,14 +830,14 @@ class DRLNavEnv(gym.Env):
             for i in range(80):
                 scan_avg[2*n, i] = np.min(scan_tmp[i*9:(i+1)*9])
                 scan_avg[2*n+1, i] = np.mean(scan_tmp[i*9:(i+1)*9])
-        
+
         scan_avg = scan_avg.reshape(1600)
         scan_avg_map = np.matlib.repmat(scan_avg,1,4)
         self.scan = scan_avg_map.reshape(6400)
         s_min = 0
         s_max = 30
         self.scan = 2 * (self.scan - s_min) / (s_max - s_min) + (-1)
-        
+
         # goal:
         # MaxAbsScaler:
         g_min = -2
@@ -863,7 +863,7 @@ class DRLNavEnv(gym.Env):
         #self.observation = np.concatenate((self.scan, self.goal), axis=None)
         rospy.logdebug("Observation ==> {}".format(self.observation))
         return self.observation
-    
+
     def _post_information(self):
         """
         Return:
@@ -873,8 +873,8 @@ class DRLNavEnv(gym.Env):
             "initial_pose": self.init_pose,
             "goal_position": self.goal_position,
             "current_pose": self.curr_pose
-            }
-        
+        }
+
         return self.info
 
     def _take_action(self, action):
@@ -896,14 +896,14 @@ class DRLNavEnv(gym.Env):
         cmd_vel.linear.x = (action[0] + 1) * (vx_max - vx_min) / 2 + vx_min
         cmd_vel.angular.z = (action[1] + 1) * (vz_max - vz_min) / 2 + vz_min
         #self._check_publishers_connection()
-    
+
         rate = rospy.Rate(20)
         for _ in range(1):
             self._cmd_vel_pub.publish(cmd_vel)
             #rospy.logdebug("cmd_vel: \nlinear: {}\nangular: {}".format(cmd_vel.linear.x,
             #                                                    cmd_vel.angular.z))
             rate.sleep()
-    
+
         # self._cmd_vel_pub.publish(cmd_vel)
         rospy.logwarn("cmd_vel: \nlinear: {}\nangular: {}".format(cmd_vel.linear.x, cmd_vel.angular.z))
 
@@ -943,9 +943,9 @@ class DRLNavEnv(gym.Env):
         # distance to goal:
         dist_to_goal = np.linalg.norm(
             np.array([
-            self.curr_pose.position.x - self.goal_position.x,
-            self.curr_pose.position.y - self.goal_position.y,
-            self.curr_pose.position.z - self.goal_position.z
+                self.curr_pose.position.x - self.goal_position.x,
+                self.curr_pose.position.y - self.goal_position.y,
+                self.curr_pose.position.z - self.goal_position.z
             ])
         )
         # t-1 id:
@@ -956,7 +956,7 @@ class DRLNavEnv(gym.Env):
 
         rospy.logwarn("distance_to_goal_reg = {}".format(self.dist_to_goal_reg[t_1]))
         rospy.logwarn("distance_to_goal = {}".format(dist_to_goal))
-        max_iteration = 512 #800 
+        max_iteration = 512 #800
         # reward calculation:
         if(dist_to_goal <= self.GOAL_RADIUS):  # goal reached: t = T
             reward = r_arrival
@@ -968,7 +968,7 @@ class DRLNavEnv(gym.Env):
         # storage the robot pose at t-1:
         #if(self.num_iterations % 40 == 0):
         self.dist_to_goal_reg[t_1] = dist_to_goal #self.curr_pose
-    
+
         rospy.logwarn("Goal reached reward: {}".format(reward))
         return reward
 
@@ -1028,13 +1028,13 @@ class DRLNavEnv(gym.Env):
                 theta = random.uniform(-np.pi, np.pi)
                 free = True
                 for ped in mht_peds.tracks:
-                    #ped_id = ped.track_id 
+                    #ped_id = ped.track_id
                     # create pedestrian's postion costmap: 10*10 m
                     p_x = ped.pose.pose.position.x
                     p_y = ped.pose.pose.position.y
                     p_vx = ped.twist.twist.linear.x
                     p_vy = ped.twist.twist.linear.y
-                    
+
                     ped_dis = np.linalg.norm([p_x, p_y])
                     if(ped_dis <= 7):
                         ped_theta = np.arctan2(p_y, p_x)
@@ -1051,14 +1051,14 @@ class DRLNavEnv(gym.Env):
                     if(theta_diff < theta_min):
                         theta_min = theta_diff
                         d_theta = theta
-                
+
         else: # no obstacles:
             d_theta = theta_pre
 
         reward = r_angle*(angle_thresh - abs(d_theta))
 
         rospy.logwarn("Theta reward: {}".format(reward))
-        return reward  
+        return reward
 
     def _is_done(self, reward):
         """
@@ -1078,9 +1078,9 @@ class DRLNavEnv(gym.Env):
         # distance to goal:
         dist_to_goal = np.linalg.norm(
             np.array([
-            self.curr_pose.position.x - self.goal_position.x,
-            self.curr_pose.position.y - self.goal_position.y,
-            self.curr_pose.position.z - self.goal_position.z
+                self.curr_pose.position.x - self.goal_position.x,
+                self.curr_pose.position.y - self.goal_position.y,
+                self.curr_pose.position.z - self.goal_position.z
             ])
         )
         if(dist_to_goal <= self.GOAL_RADIUS):
@@ -1097,7 +1097,7 @@ class DRLNavEnv(gym.Env):
         if(min_scan_dist <= self.ROBOT_RADIUS and min_scan_dist >= 0.02):
             self.bump_num += 1
 
-        # stop and reset if more than 5 collisions: 
+        # stop and reset if more than 5 collisions:
         if(self.bump_num >= 3):
             # reset the robot velocity to 0:
             self._cmd_vel_pub.publish(Twist())

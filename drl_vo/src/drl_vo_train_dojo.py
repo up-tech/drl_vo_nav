@@ -18,7 +18,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.results_plotter import load_results, ts2xy
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.callbacks import BaseCallback
-from custom_cnn_full import *
+from custom_cnn_full_lite import *
 
 
 class SaveOnBestTrainingRewardCallback(BaseCallback):
@@ -80,7 +80,7 @@ log_dir = rospy.get_param('~log_dir', "./runs/")
 os.makedirs(log_dir, exist_ok=True)
 
 # Create and wrap the environment
-env = gym.make('drl-nav-v0')
+env = gym.make('drl-nav-v1')
 env = Monitor(env, log_dir) #, allow_early_resets=True)  # in order to get rollout log data
 # env = DummyVecEnv([lambda: env])
 obs = env.reset()
@@ -96,13 +96,13 @@ policy_kwargs = dict(
 #model = PPO("CnnPolicy", env, policy_kwargs=policy_kwargs, learning_rate=1e-3, verbose=2, tensorboard_log=log_dir, n_steps=512, n_epochs=10, batch_size=128) #, gamma=0.96, ent_coef=0.1, vf_coef=0.4) 
 
 # continue training:
-kwargs = {'tensorboard_log':log_dir, 'verbose':2, 'n_epochs':10, 'n_steps':512, 'batch_size':128,'learning_rate':5e-5}
+kwargs = {'tensorboard_log':log_dir, 'verbose':2, 'n_epochs':5, 'n_steps':256, 'batch_size':64,'learning_rate':5e-5}
 model_file = rospy.get_param('~model_file', "./model/drl_pre_train.zip")
 model = PPO.load(model_file, env=env, **kwargs)
 
 # Create the callback: check every 1000 steps
 callback = SaveOnBestTrainingRewardCallback(check_freq=5000, log_dir=log_dir)
-model.learn(total_timesteps=1000000, log_interval=5, tb_log_name='drl_vo_policy', callback=callback, reset_num_timesteps=True)
+model.learn(total_timesteps=2000000, log_interval=5, tb_log_name='drl_vo_policy', callback=callback, reset_num_timesteps=True)
 
 # Saving final model
 model.save("drl_vo_model")

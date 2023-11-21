@@ -31,11 +31,10 @@ import time
 from kobuki_msgs.msg import BumperEvent
 from actionlib_msgs.msg import GoalStatusArray
 from pedsim_msgs.msg  import TrackedPersons, TrackedPerson
-from cnn_msgs.msg import CNN_data
+from st_msgs.msg import ST_data
 
 
-
-class DRLNavDojoEnv(gym.Env):
+class DRLNavEnv(gym.Env):
     """
     Gazebo env converts standard openai gym methods into Gazebo commands
 
@@ -47,7 +46,7 @@ class DRLNavDojoEnv(gym.Env):
     """
     def __init__(self):
         # To reset Simulations
-        rospy.logdebug("START init DRLNavDojoEnv")
+        rospy.logdebug("START init DRLNavEnv")
         self.seed()
 
         # robot parameters:
@@ -74,19 +73,38 @@ class DRLNavDojoEnv(gym.Env):
         self.low_action = np.array([-1, -1])
         self.action_space = spaces.Box(low=self.low_action, high=self.high_action, dtype=np.float32)
         # observation space
-        self.cnn_data = CNN_data()
-        self.ped_pos = []
-        self.scan = []
-        self.goal = []
-        #self.vel = []
+        self.st_data = ST_data()
 
         # self.observation_space = spaces.Box(low=-30, high=30, shape=(6402,), dtype=np.float32)
         # MaxAbsScaler: normalize to (-1,1)
-        self.observation_space = spaces.Box(low=-1, high=1, shape=(19202,), dtype=np.float32)
+
+        self.predict_steps = 5
+        self.human_num = 10
+
+        d = {}
+        # robot node: num_visible_humans, px, py, r, gx, gy, v_pref, theta
+        d['robot_node'] = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1, 5,), dtype=np.float32)
+        # only consider all temporal edges (human_num+1) and spatial edges pointing to robot (human_num)
+        d['temporal_edges'] = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1, 2,), dtype=np.float32)
+
+        # predictions only include px, py
+        self.spatial_edge_dim = int(2*(self.predict_steps+1))
+        #spatial_edges: [max_human_num, [state_t, state_(t+1), ..., state(t+self.pred_steps)]]
+        d['spatial_edges'] = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.human_num * self.spatial_edge_dim, ), dtype=np.float32)
+
+        # whether each human is visible to robot (ordered by human ID, should not be sorted)
+        d['visible_masks'] = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.human_num,), dtype=np.bool)
+
+        # number of humans detected at each timestep
+        d['detected_human_num'] = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32)
+
+        self.observation_space = gym.spaces.Dict(d)
+
         # info, initial position and goal position
         self.init_pose = Pose()
         self.curr_pose = Pose()
         self.curr_vel = Twist()
+        self.curr_vz = 0.0
         self.goal_position = Point()
         self.info = {}
         # episode done flag:
@@ -108,7 +126,7 @@ class DRLNavDojoEnv(gym.Env):
         self.gazebo.unpauseSim()
         # We Start all the ROS related Subscribers and publishers
         self._map_sub = rospy.Subscriber("/map", OccupancyGrid, self._map_callback)
-        self._cnn_data_sub = rospy.Subscriber("/cnn_data", CNN_data, self._cnn_data_callback, queue_size=1, buff_size=2**24)
+        self._st_data_sub = rospy.Subscriber("/st_data", ST_data, self._st_data_callback, queue_size=1, buff_size=2**24)
         self._robot_pos_sub = rospy.Subscriber("/robot_pose", PoseStamped, self._robot_pose_callback) #, queue_size=1)
         self._robot_vel_sub = rospy.Subscriber('/odom', Odometry, self._robot_vel_callback) #, queue_size=1)
         self._final_goal_sub = rospy.Subscriber("/move_base/current_goal", PoseStamped, self._final_goal_callback) #, queue_size=1)
@@ -514,7 +532,7 @@ class DRLNavDojoEnv(gym.Env):
     def _check_all_subscribers_ready(self):
         rospy.logdebug("START TO CHECK ALL SUBSCRIBERS READY")
         self._check_subscriber_ready("/map", OccupancyGrid)
-        self._check_subscriber_ready("/cnn_data", CNN_data)
+        self._check_subscriber_ready("/st_data", ST_data)
         self._check_subscriber_ready("/robot_pose", PoseStamped)
         #self._check_subscriber_ready("/mobile_base/commands/velocity", Twist)
         #self._check_subscriber_ready("/move_base/current_goal", PoseStamped)
@@ -581,13 +599,24 @@ class DRLNavDojoEnv(gym.Env):
         self.map = map_msg
 
     # Callback function for the cnn_data subscriber
-    def _cnn_data_callback(self, cnn_data_msg):
-        """
-        Receiving cnn data from cnn_data topic
-        :param: cnn data
-        :return:
-        """
-        self.cnn_data = cnn_data_msg
+    # def _cnn_data_callback(self, cnn_data_msg):
+    #     """
+    #     Receiving cnn data from cnn_data topic
+    #     :param: cnn data
+    #     :return:
+    #     """
+    #     self.cnn_data = cnn_data_msg
+
+    # Callback function for the cnn_data subscriber
+    def _st_data_callback(self, st_data_msg):
+
+        if len(st_data_msg.spatial_edges) != 120:
+            pass
+            print("DEBUG SPATIAL_EDGES SIZE != 120")
+        else:
+            self.st_data = st_data_msg
+        # print(st_data_msg.spatial_edges)
+        # print(f"call back spatial len: {len(st_data_msg.spatial_edges)}")
 
     # Callback function for the robot pose subscriber
     def _robot_pose_callback(self, robot_pose_msg):
@@ -809,59 +838,19 @@ class DRLNavDojoEnv(gym.Env):
         """
         Returns the observation.
         """
-        self.ped_pos = self.cnn_data.ped_pos_map
-        self.scan = self.cnn_data.scan
-        self.goal = self.cnn_data.goal_cart
-        self.vel = self.cnn_data.vel
+        obs = {}
 
-        # ped map:
-        # MaxAbsScaler:
-        v_min = -2
-        v_max = 2
-        self.ped_pos = np.array(self.ped_pos, dtype=np.float32)
-        self.ped_pos = 2 * (self.ped_pos - v_min) / (v_max - v_min) + (-1)
+        obs['robot_node'] = self.st_data.robot_node
+        obs['temporal_edges'] = self.st_data.temporal_edges
+        obs['spatial_edges'] = self.st_data.spatial_edges
+        obs['visible_masks'] = self.st_data.visible_masks
+        obs['detected_human_num'] = self.st_data.detected_human_num
+        #(f"spatial edges len: {len(obs['spatial_edges'])}")
 
-        # scan map:
-        # MaxAbsScaler:
-        temp = np.array(self.scan, dtype=np.float32)
-        scan_avg = np.zeros((20,80))
-        for n in range(10):
-            scan_tmp = temp[n*720:(n+1)*720]
-            for i in range(80):
-                scan_avg[2*n, i] = np.min(scan_tmp[i*9:(i+1)*9])
-                scan_avg[2*n+1, i] = np.mean(scan_tmp[i*9:(i+1)*9])
+        self.observation = obs
 
-        scan_avg = scan_avg.reshape(1600)
-        scan_avg_map = np.matlib.repmat(scan_avg,1,4)
-        self.scan = scan_avg_map.reshape(6400)
-        s_min = 0
-        s_max = 30
-        self.scan = 2 * (self.scan - s_min) / (s_max - s_min) + (-1)
-
-        # goal:
-        # MaxAbsScaler:
-        g_min = -2
-        g_max = 2
-        self.goal = np.array(self.goal, dtype=np.float32)
-        self.goal = 2 * (self.goal - g_min) / (g_max - g_min) + (-1)
-        #self.goal = self.goal.tolist()
-
-        '''
-        # vel:
-        # MaxAbsScaler:
-        vx_min = 0
-        vx_max = 0.5
-        wz_min = -2
-        wz_max = 2
-        self.vel = np.array(self.vel, dtype=np.float32)
-        self.vel[0] = 2 * (self.vel[0] - vx_min) / (vx_max - vx_min) + (-1)
-        self.vel[1] = 2 * (self.vel[1] - wz_min) / (wz_max - wz_min) + (-1)
-        '''
-
-        # observation:
-        self.observation = np.concatenate((self.ped_pos, self.scan, self.goal), axis=None) #list(itertools.chain(self.ped_pos, self.scan, self.goal))
-        #self.observation = np.concatenate((self.scan, self.goal), axis=None)
         rospy.logdebug("Observation ==> {}".format(self.observation))
+
         return self.observation
 
     def _post_information(self):
@@ -883,6 +872,7 @@ class DRLNavDojoEnv(gym.Env):
         Args:
         action: 2-d numpy array.
         """
+        #print(f"action is : {action}")
         rospy.logdebug("TurtleBot2 Base Twist Cmd>>\nlinear: {}\nangular: {}".format(action[0], action[1]))
         cmd_vel = Twist()
         # distance to goal:
@@ -895,6 +885,7 @@ class DRLNavDojoEnv(gym.Env):
         vz_max = 2 #3
         cmd_vel.linear.x = (action[0] + 1) * (vx_max - vx_min) / 2 + vx_min
         cmd_vel.angular.z = (action[1] + 1) * (vz_max - vz_min) / 2 + vz_min
+        self.curr_vz = cmd_vel.angular.z
         #self._check_publishers_connection()
 
         rate = rospy.Rate(20)
@@ -914,23 +905,30 @@ class DRLNavDojoEnv(gym.Env):
         """
         # reward parameters:
         r_arrival = 20 #15
-        r_waypoint = 3.2 #2.5 #1.6 #2 #3 #1.6 #6 #2.5 #2.5
-        r_collision = -20 #-15
-        r_scan = -0.2 #-0.15 #-0.3
-        r_angle = 0.6 #0.5 #1 #0.8 #1 #0.5
-        r_rotation = -0.1 #-0.15 #-0.4 #-0.5 #-0.2 # 0.1
+        r_waypoint = 3 #2.5 #1.6 #2 #3 #1.6 #6 #2.5 #2.5
+        r_collision = -10 #-15
+        #r_scan = -0.2 #-0.15 #-0.3
+        #r_angle = 0.6 #0.5 #1 #0.8 #1 #0.5
+        #r_rotation = -1 #-0.15 #-0.4 #-0.5 #-0.2 # 0.1
+        r_accelerate = -0.1
 
         angle_thresh = np.pi/6
-        w_thresh = 1 # 0.7
+        w_thresh = 0.7 # 0.7
+        accelerate_thresh = 0.3
 
         # reward parts:
+
         r_g = self._goal_reached_reward(r_arrival, r_waypoint)
-        r_c = self._obstacle_collision_punish(self.cnn_data.scan[-720:], r_scan, r_collision)
-        r_w = self._angular_velocity_punish(self.curr_vel.angular.z,  r_rotation, w_thresh)
-        r_t = self._theta_reward(self.goal, self.mht_peds, self.curr_vel.linear.x, r_angle, angle_thresh)
-        reward = r_g + r_c + r_t + r_w #+ r_v # + r_p
+        r_c = self._obstacle_collision_punish(self.st_data.scan[-720:], r_collision)
+
+        # r_w = self._angular_velocity_punish(self.curr_vel.angular.z, r_rotation, w_thresh)
+        r_a = self._angular_accelerate_punish(self.curr_vel.angular.z, self.curr_vz, r_accelerate, accelerate_thresh)
+
+        #r_t = self._theta_reward(self.goal, self.mht_peds, self.curr_vel.linear.x, r_angle, angle_thresh)
+        reward = r_g + r_c + r_a
         #rospy.logwarn("Current Velocity: \ncurr_vel = {}".format(self.curr_vel.linear.x))
         rospy.logwarn("Compute reward done. \nreward = {}".format(reward))
+
         return reward
 
     def _goal_reached_reward(self, r_arrival, r_waypoint):
@@ -954,14 +952,15 @@ class DRLNavDojoEnv(gym.Env):
         if(self.num_iterations == 0):
             self.dist_to_goal_reg = np.ones(self.DIST_NUM)*dist_to_goal
 
-        rospy.logwarn("distance_to_goal_reg = {}".format(self.dist_to_goal_reg[t_1]))
-        rospy.logwarn("distance_to_goal = {}".format(dist_to_goal))
+        # rospy.logwarn("distance_to_goal_reg = {}".format(self.dist_to_goal_reg[t_1]))
+        # rospy.logwarn("distance_to_goal = {}".format(dist_to_goal))
+
         max_iteration = 512 #800
         # reward calculation:
         if(dist_to_goal <= self.GOAL_RADIUS):  # goal reached: t = T
             reward = r_arrival
-        elif(self.num_iterations >= max_iteration):  # failed to the goal
-            reward = -r_arrival
+        # elif(self.num_iterations >= max_iteration):  # failed to the goal
+        #     reward = -r_arrival
         else:   # on the way
             reward = r_waypoint*(self.dist_to_goal_reg[t_1] - dist_to_goal)
 
@@ -972,26 +971,27 @@ class DRLNavDojoEnv(gym.Env):
         rospy.logwarn("Goal reached reward: {}".format(reward))
         return reward
 
-    def _obstacle_collision_punish(self, scan, r_scan, r_collision):
+    def _obstacle_collision_punish(self, scan, r_collision):
         """
         Returns negative reward if the robot collides with obstacles.
         :param scan containing obstacles that should be considered
         :param k reward constant
         :return: returns reward colliding with obstacles
         """
-        min_scan_dist = np.amin(scan[scan!=0])
+
+        min_scan_dist = np.amin(scan)
         #if(self.bump_flag == True): #or self.pos_valid_flag == False):
         if(min_scan_dist <= self.ROBOT_RADIUS and min_scan_dist >= 0.02):
             reward = r_collision
-        elif(min_scan_dist < 3*self.ROBOT_RADIUS):
-            reward = r_scan * (3*self.ROBOT_RADIUS - min_scan_dist)
+        # elif(min_scan_dist < 3*self.ROBOT_RADIUS):
+        #     reward = r_scan * (3*self.ROBOT_RADIUS - min_scan_dist)
         else:
             reward = 0.0
 
         rospy.logwarn("Obstacle collision reward: {}".format(reward))
         return reward
 
-    def _angular_velocity_punish(self, w_z,  r_rotation, w_thresh):
+    def _angular_velocity_punish(self, w_z, r_rotation, w_thresh):
         """
         Returns negative reward if the robot turns.
         :param w roatational speed of the robot
@@ -1001,6 +1001,15 @@ class DRLNavDojoEnv(gym.Env):
         """
         if(abs(w_z) > w_thresh):
             reward = abs(w_z) * r_rotation
+        else:
+            reward = 0.0
+
+        rospy.logwarn("Angular velocity punish reward: {}".format(reward))
+        return reward
+
+    def _angular_accelerate_punish(self, curr_z, curr_vz, r_accelerate, accelerate_thresh):
+        if(abs(curr_z - curr_vz) > accelerate_thresh):
+            reward = abs(curr_z - curr_vz) * r_accelerate
         else:
             reward = 0.0
 
@@ -1091,8 +1100,8 @@ class DRLNavDojoEnv(gym.Env):
             return True
 
         # 2) Obstacle collision?
-        scan = self.cnn_data.scan[-720:]
-        min_scan_dist = np.amin(scan[scan!=0])
+        scan = self.st_data.scan[-720:]
+        min_scan_dist = np.amin(scan)
         #if(self.bump_flag == True): #or self.pos_valid_flag == False):
         if(min_scan_dist <= self.ROBOT_RADIUS and min_scan_dist >= 0.02):
             self.bump_num += 1
@@ -1106,7 +1115,6 @@ class DRLNavDojoEnv(gym.Env):
             self._reset = True # reset the simulation world
             rospy.logwarn("TurtleBot collided to obstacles many times before going to the goal @ {}...".format(self.goal_position))
             return True
-
 
         # 4) maximum number of iterations?
         max_iteration = 512 #800 # 34 pedestrians: 3000: 5m; no pedestrians: 800: 3m

@@ -25,7 +25,7 @@ from cnn_msgs.msg import CNN_data
 from geometry_msgs.msg import Twist
 from geometry_msgs.msg import Point
 from stable_baselines3 import PPO
-from custom_cnn_full import *
+from custom_cnn_full_lite import *
 
 
 #-----------------------------------------------------------------------------
