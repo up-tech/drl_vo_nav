@@ -159,7 +159,7 @@ class CustomCNN(BaseFeaturesExtractor):
             norm_layer = nn.BatchNorm2d
         self._norm_layer = norm_layer
 
-        self.inplanes = 64
+        self.inplanes = 32
         self.dilation = 1
         if replace_stride_with_dilation is None:
             # each element in the tuple indicates if we should replace
@@ -175,13 +175,31 @@ class CustomCNN(BaseFeaturesExtractor):
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
-        self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2,
+        self.layer1 = self._make_layer(block, 32, layers[0])
+        self.layer2 = self._make_layer(block, 64, layers[1], stride=2,
                                        dilate=replace_stride_with_dilation[0])
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2,
+        self.layer3 = self._make_layer(block, 128, layers[2], stride=2,
                                        dilate=replace_stride_with_dilation[1])
         
         self.conv2_2 = nn.Sequential(
+            nn.Conv2d(in_channels=128, out_channels=64, kernel_size=(1, 1), stride=(1,1), padding=(0, 0)),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=(3, 3), stride=(1,1), padding=(1, 1)),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=(1, 1), stride=(1,1), padding=(0, 0)),
+            nn.BatchNorm2d(128)
+        )
+        self.downsample2 = nn.Sequential(
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=(1, 1), stride=(2,2), padding=(0, 0)),
+            nn.BatchNorm2d(128)
+        )
+        self.relu2 = nn.ReLU(inplace=True)
+
+        self.conv3_2 = nn.Sequential(
             nn.Conv2d(in_channels=256, out_channels=128, kernel_size=(1, 1), stride=(1,1), padding=(0, 0)),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
@@ -193,27 +211,9 @@ class CustomCNN(BaseFeaturesExtractor):
             nn.Conv2d(in_channels=128, out_channels=256, kernel_size=(1, 1), stride=(1,1), padding=(0, 0)),
             nn.BatchNorm2d(256)
         )
-        self.downsample2 = nn.Sequential(
-            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=(1, 1), stride=(2,2), padding=(0, 0)),
-            nn.BatchNorm2d(256)
-        )
-        self.relu2 = nn.ReLU(inplace=True)
-
-        self.conv3_2 = nn.Sequential(
-            nn.Conv2d(in_channels=512, out_channels=256, kernel_size=(1, 1), stride=(1,1), padding=(0, 0)),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-
-            nn.Conv2d(in_channels=256, out_channels=256, kernel_size=(3, 3), stride=(1,1), padding=(1, 1)),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-
-            nn.Conv2d(in_channels=256, out_channels=512, kernel_size=(1, 1), stride=(1,1), padding=(0, 0)),
-            nn.BatchNorm2d(512)
-        )
         self.downsample3 = nn.Sequential(
-            nn.Conv2d(in_channels=64, out_channels=512, kernel_size=(1, 1), stride=(4,4), padding=(0, 0)),
-            nn.BatchNorm2d(512)
+            nn.Conv2d(in_channels=32, out_channels=256, kernel_size=(1, 1), stride=(4,4), padding=(0, 0)),
+            nn.BatchNorm2d(256)
         )
         self.relu3 = nn.ReLU(inplace=True)
 
@@ -221,7 +221,7 @@ class CustomCNN(BaseFeaturesExtractor):
         #                               dilate=replace_stride_with_dilation[2])
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.linear_fc = nn.Sequential(
-            nn.Linear(256 * block.expansion + 2, features_dim),
+            nn.Linear(128 * block.expansion + 2, features_dim),
             #nn.BatchNorm1d(features_dim),
             nn.ReLU()
         )
