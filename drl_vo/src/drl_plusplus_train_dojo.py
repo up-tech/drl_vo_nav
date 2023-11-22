@@ -18,7 +18,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.results_plotter import load_results, ts2xy
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.callbacks import BaseCallback
-from custom_cnn_full_lite import *
+from st_network import *
 
 
 class SaveOnBestTrainingRewardCallback(BaseCallback):
@@ -71,7 +71,6 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
 	  
         return True
 
-
 # create ros node:
 rospy.init_node('env_test', anonymous=True, log_level=rospy.WARN) #log_level=rospy.ERROR)   
 
@@ -83,26 +82,33 @@ os.makedirs(log_dir, exist_ok=True)
 env = gym.make('drl-nav-v2')
 env = Monitor(env, log_dir) #, allow_early_resets=True)  # in order to get rollout log data
 # env = DummyVecEnv([lambda: env])
+
 obs = env.reset()
+#print(obs)
 
 # policy parameters:
 policy_kwargs = dict(
-    features_extractor_class=CustomCNN,
-    features_extractor_kwargs=dict(features_dim=256),
-    net_arch=[dict(pi=[256], vf=[128])]
+    features_extractor_class=selfAttn_merge_SRNN,
+    #features_extractor_kwargs=dict(features_dim=256),
+    net_arch=[dict(pi=[256], vf=[256])]
 )
 
 # raw training:
-#model = PPO("CnnPolicy", env, policy_kwargs=policy_kwargs, learning_rate=1e-3, verbose=2, tensorboard_log=log_dir, n_steps=512, n_epochs=10, batch_size=128) #, gamma=0.96, ent_coef=0.1, vf_coef=0.4) 
+model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs, learning_rate=1e-3, verbose=2, 
+            tensorboard_log=log_dir, n_steps=256, n_epochs=5, batch_size=64, ent_coef=0.005)
+# model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs, learning_rate=1e-3, verbose=1, 
+#             tensorboard_log=log_dir)
+
+#print(model.policy)
 
 # continue training:
-kwargs = {'tensorboard_log':log_dir, 'verbose':2, 'n_epochs':5, 'n_steps':256, 'batch_size':64,'learning_rate':5e-5}
-model_file = rospy.get_param('~model_file', "./model/drl_pre_train.zip")
-model = PPO.load(model_file, env=env, **kwargs)
+#kwargs = {'tensorboard_log':log_dir, 'verbose':2, 'n_epochs':5, 'n_steps':256, 'batch_size':64,'learning_rate':5e-5}
+# model_file = rospy.get_param('~model_file', "./model/drl_pre_train.zip")
+# model = PPO.load(model_file, env=env, **kwargs)
 
 # Create the callback: check every 1000 steps
 callback = SaveOnBestTrainingRewardCallback(check_freq=5000, log_dir=log_dir)
-model.learn(total_timesteps=2000000, log_interval=5, tb_log_name='drl_vo_policy', callback=callback, reset_num_timesteps=True)
+model.learn(total_timesteps=1000000, log_interval=5, tb_log_name='drl_plusplus_dojo_policy', callback=callback, reset_num_timesteps=True)
 
 # Saving final model
 model.save("drl_vo_model")

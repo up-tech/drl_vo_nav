@@ -36,7 +36,7 @@
   <!-- Statial and Temporal DATA -->
   <include file="$(find drl_vo_nav)/launch/nav_st_data.launch"/>
 
-  <!-- DRL-VO Control Policy -->
+  <!-- Control Policy -->
   <include file="$(find drl_vo_nav)/launch/plusplus_train_dojo.launch">
     <arg name="model_file" value="$(arg model_file)"/>
     <arg name="log_dir" value="$(arg log_dir)"/>

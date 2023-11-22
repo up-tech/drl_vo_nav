@@ -35,7 +35,7 @@ from cnn_msgs.msg import CNN_data
 
 
 
-class DRLNavDojoPlusPlusEnv(gym.Env):
+class DRLNavEnv(gym.Env):
     """
     Gazebo env converts standard openai gym methods into Gazebo commands
 
@@ -47,7 +47,7 @@ class DRLNavDojoPlusPlusEnv(gym.Env):
     """
     def __init__(self):
         # To reset Simulations
-        rospy.logdebug("START init DRLNavDojoPlusPlusEnv")
+        rospy.logdebug("START init DRLNavEnv")
         self.seed()
 
         # robot parameters:

@@ -102,7 +102,7 @@ model = PPO.load(model_file, env=env, **kwargs)
 
 # Create the callback: check every 1000 steps
 callback = SaveOnBestTrainingRewardCallback(check_freq=5000, log_dir=log_dir)
-model.learn(total_timesteps=2000000, log_interval=5, tb_log_name='drl_vo_policy', callback=callback, reset_num_timesteps=True)
+model.learn(total_timesteps=2000000, log_interval=5, tb_log_name='drl_vo_dojo_policy', callback=callback, reset_num_timesteps=True)
 
 # Saving final model
 model.save("drl_vo_model")

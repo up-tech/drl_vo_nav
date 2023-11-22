@@ -6,7 +6,7 @@ if [ -d "$DIR" ]; then
 else
   ###  Control will jump here if $DIR does NOT exists ###
   echo "${DIR} not found, creating ${DIR}"
-  mkdir ${DIR}
+  mkdir ${DIR}    
 fi
 Xvfb :1 -screen 0 1600x1200x16  &
 export DISPLAY=:1.0
