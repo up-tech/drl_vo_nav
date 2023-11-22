@@ -126,7 +126,7 @@ class Bottleneck(nn.Module):
 
 # define the PyTorch MLP model
 #
-class CustomCNN(BaseFeaturesExtractor):
+class CustomCNNLite(BaseFeaturesExtractor):
 
     # function: init
     #
@@ -151,7 +151,7 @@ class CustomCNN(BaseFeaturesExtractor):
 
         # inherit the superclass properties/methods
         #
-        super(CustomCNN, self).__init__(observation_space, features_dim)
+        super(CustomCNNLite, self).__init__(observation_space, features_dim)
         # define the model
         #
         ################## ped_pos net model: ###################

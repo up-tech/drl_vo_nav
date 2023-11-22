@@ -25,7 +25,7 @@ from cnn_msgs.msg import CNN_data
 from geometry_msgs.msg import Twist
 from geometry_msgs.msg import Point
 from stable_baselines3 import PPO
-from custom_cnn_full import *
+from custom_cnn_full_lite import *
 
 
 #-----------------------------------------------------------------------------
@@ -38,7 +38,7 @@ from custom_cnn_full import *
 # for reproducibility, we seed the rng
 #       
 policy_kwargs = dict(
-    features_extractor_class=CustomCNN,
+    features_extractor_class=CustomCNNLite,
     features_extractor_kwargs=dict(features_dim=256),
 )
 
