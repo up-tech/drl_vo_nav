@@ -905,27 +905,26 @@ class DRLNavDojoPlusPlusEnv(gym.Env):
         """
         # reward parameters:
         r_arrival = 20 #15
-        r_waypoint = 3 #2.5 #1.6 #2 #3 #1.6 #6 #2.5 #2.5
-        r_collision = -10 #-15
-        #r_scan = -0.2 #-0.15 #-0.3
+        r_waypoint = 3.2 #2.5 #1.6 #2 #3 #1.6 #6 #2.5 #2.5
+        r_collision = -20 #-15
+        r_scan = -0.2 #-0.15 #-0.3
         #r_angle = 0.6 #0.5 #1 #0.8 #1 #0.5
-        #r_rotation = -1 #-0.15 #-0.4 #-0.5 #-0.2 # 0.1
+        r_rotation = -1 #-0.15 #-0.4 #-0.5 #-0.2 # 0.1
         r_accelerate = -0.1
+        w_thresh = 1 # 0.7
+        accelerate_thresh = 0.3
 
         angle_thresh = np.pi/6
-        w_thresh = 0.7 # 0.7
-        accelerate_thresh = 0.3
 
         # reward parts:
 
         r_g = self._goal_reached_reward(r_arrival, r_waypoint)
-        r_c = self._obstacle_collision_punish(self.st_data.scan[-720:], r_collision)
-
-        # r_w = self._angular_velocity_punish(self.curr_vel.angular.z, r_rotation, w_thresh)
+        r_c = self._obstacle_collision_punish(self.st_data.scan[-720:], r_scan, r_collision)
+        r_w = self._angular_velocity_punish(self.curr_vel.angular.z, r_rotation, w_thresh)
         r_a = self._angular_accelerate_punish(self.curr_vel.angular.z, self.curr_vz, r_accelerate, accelerate_thresh)
-
         #r_t = self._theta_reward(self.goal, self.mht_peds, self.curr_vel.linear.x, r_angle, angle_thresh)
-        reward = r_g + r_c + r_a
+        
+        reward = r_g + r_c + r_a + r_w
         #rospy.logwarn("Current Velocity: \ncurr_vel = {}".format(self.curr_vel.linear.x))
         rospy.logwarn("Compute reward done. \nreward = {}".format(reward))
 
@@ -971,20 +970,19 @@ class DRLNavDojoPlusPlusEnv(gym.Env):
         rospy.logwarn("Goal reached reward: {}".format(reward))
         return reward
 
-    def _obstacle_collision_punish(self, scan, r_collision):
+    def _obstacle_collision_punish(self, scan, r_scan, r_collision):
         """
         Returns negative reward if the robot collides with obstacles.
         :param scan containing obstacles that should be considered
         :param k reward constant
         :return: returns reward colliding with obstacles
         """
-
         min_scan_dist = np.amin(scan)
         #if(self.bump_flag == True): #or self.pos_valid_flag == False):
         if(min_scan_dist <= self.ROBOT_RADIUS and min_scan_dist >= 0.02):
             reward = r_collision
-        # elif(min_scan_dist < 3*self.ROBOT_RADIUS):
-        #     reward = r_scan * (3*self.ROBOT_RADIUS - min_scan_dist)
+        elif(min_scan_dist < 3*self.ROBOT_RADIUS):
+            reward = r_scan * (3*self.ROBOT_RADIUS - min_scan_dist)
         else:
             reward = 0.0
 
